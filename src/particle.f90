@@ -83,6 +83,8 @@ module particle_type
     pa%rho=10._mytype
 
     pa%qe=1.e-5_mytype
+    
+    pa%id=0
 
   end subroutine init_one_particle
   !+-------------------------------------------------------------------+
@@ -810,6 +812,9 @@ module particle
   real(mytype) :: particletime,sub_time_step,particle_inject_period,next_particle_inject_time
   type(partype),allocatable,target :: partpack(:),particles2inject(:)
   real(mytype),allocatable,dimension(:) :: lxmin,lxmax,lymin,lymax,lzmin,lzmax
+  
+  integer :: n_particles2inject,global_particle_id
+  real(mytype) :: particle_range(6)
   !+------------------+-----------------------------------------------+
   !|n_local_particles | number of particles in the domain             |
   !|      n_particles | total number of particles.                    |
@@ -832,7 +837,7 @@ module particle
   public :: local_domain_size,particle_init,intt_particles,           &
             particle_report,visu_particle,particle_checkpoint,        &
             n_particles,initype_particle,bc_particle,                 &
-            particle_inject_period
+            particle_inject_period,n_particles2inject
 
   contains
 
@@ -878,10 +883,10 @@ module particle
 
         if(trim(initype_particle)=='random') then
             write(*,'(A,I0,A)')' ** particle initilisation: generate ', &
-                        n_particles,' random particles '
+                        n_particles2inject,' random particles '
         elseif(trim(initype_particle)=='uniform') then
             write(*,'(A,I0,A)')' ** particle initilisation: generate ', &
-                        n_particles,' uniformly distributed particles '
+                        n_particles2inject,' uniformly distributed particles '
         else
 
             inquire(file=trim(initype_particle), exist=file_exists, size=file_size)
@@ -921,7 +926,7 @@ module particle
     ! range of initial particles
     
     ! local data
-    real(mytype) :: particle_range(6)
+    !real(mytype) :: particle_range(6)
     logical :: file_exists
     integer :: psize
 
@@ -938,6 +943,8 @@ module particle
     if(present(pymax)) particle_range(4) = pymax
     if(present(pzmin)) particle_range(5) = pzmin
     if(present(pzmax)) particle_range(6) = pzmax
+    
+    global_particle_id=0
 
     ! generate random particles within the local domain
     if(trim(initype_particle)=='random') then 
@@ -961,7 +968,7 @@ module particle
 
     if(particle_inject_period>0.0_mytype) then
         if(n_local_particles>0) particles2inject=partpack
-        call particle_checkpoint(mode='write',filename='particle_inject.bin')
+        call particle_checkpoint(mode='write',filename='particle-inject')
 
         next_particle_inject_time = 0.0_mytype + particle_inject_period
     endif
@@ -1025,6 +1032,8 @@ module particle
     
     logical,save :: firstcal=.true.,particle_inject=.false.
     
+    integer :: n_new_local_particles,n_new_particles
+    
     if(firstcal) then
 
       allocate( ux0(xsize(1),xsize(2),xsize(3)), &
@@ -1058,6 +1067,12 @@ module particle
       particletime=particletime+sub_time_step
       
       if(particle_inject .and. particletime>=next_particle_inject_time) then
+        
+        if(trim(initype_particle)=='random') then
+          call particle_gen_random(particles2inject,n_new_local_particles,particle_range)
+          n_new_particles=psum(n_new_local_particles)
+          if(nrank==0) print*,'** ',n_new_particles,'random particles to be injected'
+        endif
 
         call inject_particles(particles2inject)
 
@@ -1237,9 +1252,9 @@ module particle
     integer, intent(in) :: itime
 
     integer :: num,j,iovp,psize,p
-    character(len=64) :: file2write,fname
+    character(len=64) :: file2write_xyz,file2write_uvw,file2write_pid,fname
 
-    real(mytype),allocatable :: xyz(:,:)
+    real(mytype),allocatable :: xyz(:,:),uvw(:,:),pid(:)
 
     ! Snapshot number
     num = itime/ioutput 
@@ -1247,6 +1262,8 @@ module particle
     psize=msize(partpack)
     
     allocate(xyz(3,n_local_particles))
+    allocate(uvw(3,n_local_particles))
+    allocate(pid(n_local_particles))
     
     j=0
     do p=1,psize
@@ -1255,15 +1272,23 @@ module particle
     
       j=j+1
 
-      xyz(1:3,j)  =partpack(p)%x(1:3)
+      xyz(1:3,j)=partpack(p)%x(1:3)
+      
+      uvw(1:3,j)=partpack(p)%v(1:3)
+      
+      pid(j)=partpack(p)%id
 
       if(j==n_local_particles) exit
 
     enddo
 
-    file2write='particle_coordinates_'//int_to_str(num)//'.bin'
+    file2write_xyz='particle_coordinates_'//int_to_str(num)//'.bin'
+    file2write_uvw='particle_velocities_'//int_to_str(num)//'.bin'
+    file2write_pid='particle_id_'//int_to_str(num)//'.bin'
 
-    call pwrite('./data/'//trim(file2write),xyz)
+    call pwrite('./data/'//trim(file2write_xyz),xyz)
+    call pwrite('./data/'//trim(file2write_uvw),uvw)
+    call pwrite('./data/'//trim(file2write_pid),pid)
 
     if(nrank==0) then
 
@@ -1275,15 +1300,25 @@ module particle
       write(iovp,'(A)')'<Xdmf Version="3.0" xmlns:xi="http://www.w3.org/2001/XInclude">'
       write(iovp,'(A)')'  <Domain>'
       write(iovp,'(A)')'    <Grid GridType="Collection" CollectionType="Temporal">'
-
       write(iovp,'(A)')'      <Grid Name="ParticleData_t0" GridType="Uniform">'
+      
       write(iovp,'(A,I0,A)')'        <Topology TopologyType="Polyvertex" NodesPerElement="',n_particles,'"/>'
       write(iovp,'(A)')'        <Geometry GeometryType="XYZ">'
       write(iovp,'(2(A,I0),A)')'          <DataItem Format="binary" Dimensions="',n_particles,' 3 " NumberType="Float" Precision="',mytype,'">'
-      write(iovp,'(A,A,A)')'            ',trim(file2write),' </DataItem>'
+      write(iovp,'(A,A,A)')'            ',trim(file2write_xyz),' </DataItem>'
       write(iovp,'(A)')'        </Geometry>'
+      
+      write(iovp,'(A)')'        <Attribute Name="pid" Center="Node">'
+      write(iovp,'(2(A,I0),A)')'          <DataItem Format="binary" Dimensions="',n_particles,' " NumberType="Float" Precision="',mytype,'">'
+      write(iovp,'(A,A,A)')'            ',trim(file2write_pid),' </DataItem>'
+      write(iovp,'(A)')'        </Attribute>'
+      
+      write(iovp,'(A)')'        <Attribute Name="U" Center="Node" AttributeType="Vector">'
+      write(iovp,'(2(A,I0),A)')'          <DataItem Format="binary" Dimensions="',n_particles,' 3 " NumberType="Float" Precision="',mytype,'">'
+      write(iovp,'(A,A,A)')'            ',trim(file2write_uvw),' </DataItem>'
+      write(iovp,'(A)')'        </Attribute>'
+      
       write(iovp,'(A)')'      </Grid>'
-
       write(iovp,'(A)')'    </Grid>'
       write(iovp,'(A)')'  </Domain>'
       write(iovp,'(A)')'</Xdmf>'
@@ -1312,13 +1347,15 @@ module particle
     character(len=*),intent(in),optional :: filename
 
     real(mytype),allocatable,dimension(:,:) :: xp
+    real(mytype),allocatable,dimension(:) :: partid
 
     integer :: j,p,file_size,data_size,ninject,psize
     logical :: file_exists
     real(mytype) :: xpmin(3),xpmax(3)
     character(len=80) :: particle_res_file
 
-    NAMELIST /ParTrack/ n_particles,particle_res_file,next_particle_inject_time
+    NAMELIST /ParTrack/ n_particles,particle_range,particle_res_file,&
+        next_particle_inject_time,global_particle_id
 
     if(mode=='write') then
 
@@ -1327,6 +1364,7 @@ module particle
       n_particles=psum(n_local_particles)
 
       allocate(xp(1:3,n_local_particles))
+      allocate(partid(n_local_particles))
   
       j=0
       do p=1,psize
@@ -1335,7 +1373,8 @@ module particle
     
         j=j+1
 
-        xp(1:3,j)  =partpack(p)%x(1:3)
+        xp(1:3,j)=partpack(p)%x(1:3)
+        partid(j)=partpack(p)%id
 
         if(j==n_local_particles) exit
 
@@ -1348,6 +1387,7 @@ module particle
       endif
   
       call pwrite(filename,xp)
+      call pwrite(filename//'-id',partid)
   
       deallocate(xp)
 
@@ -1356,8 +1396,12 @@ module particle
         write(111,'(A)')'&ParTrack'
         write(111,'(A)')'!========================='
         write(111,'(A,I13)') 'n_particles=  ',n_particles
+        do j=1,6
+          write(111,'(A,I0,A,F10.6)') 'particle_range(',j,')=  ',particle_range(j)
+        enddo
         write(111,'(A)')     'particle_res_file=  "'//filename//'"'
         write(111,'(A,E20.13E2)') 'next_particle_inject_time=  ',next_particle_inject_time
+        write(111,'(A,I13)') 'global_particle_id=  ',global_particle_id
         write(111,'(A)')'/End'
         write(111,'(A)')'!========================='
         close(111)
@@ -1366,7 +1410,7 @@ module particle
 
     elseif(mode=='read') then
 
-      open (111,file='restart.info',action='read')
+      open(111,file='restart.info',action='read')
       read(111, nml=ParTrack)
       close(111)
       if(nrank==0) print*,'>> restart.info'
@@ -1386,10 +1430,11 @@ module particle
 
         psize=numdist(n_particles)
 
-
         allocate(xp(1:3,psize))
+        allocate(partid(psize))
 
         call pread(trim(particle_res_file),xp)
+        call pread(trim(particle_res_file)//'-id',partid)
 
         allocate(partpack(1:psize))
 
@@ -1401,6 +1446,7 @@ module particle
           call partpack(j)%init()
     
           partpack(j)%x(1:3)=xp(1:3,j)
+          partpack(j)%id=partid(j)
     
           partpack(j)%v(1) = 0._mytype
           partpack(j)%v(2) = 0._mytype
@@ -1437,10 +1483,13 @@ module particle
         endif
 
         if(particle_inject_period>0.0_mytype) then
-
-            ! for case with injected particles, read the particle_inject.bin
-            call particle_read_bin(particles=particles2inject,filename='particle_inject.bin',nump_read=ninject)
-
+            if(.not. trim(initype_particle)=='random') then
+            
+              ! for case with injected particles, read the particle_inject.bin
+              call particle_read_bin(particles=particles2inject,filename='particle-inject',nump_read=ninject)
+              if(nrank==0) print*,'** read particle-inject.bin'
+              
+            endif
         endif
 
        else
@@ -1690,7 +1739,7 @@ module particle
     ply=particle_range(4)-particle_range(3)
     plz=particle_range(6)-particle_range(5)
 
-    local_size=numdist(n_particles)
+    local_size=numdist(n_particles2inject)
     
     allocate(particle_new(1:local_size))
     
@@ -1699,9 +1748,11 @@ module particle
     allocate(seed(n))
     seed=code+63946*(nrank+1)
     call random_seed(put = seed)
+    
+    if(global_particle_id>=1000000) global_particle_id=0
 
     p=0
-    do j=1,local_size
+    do j=1,n_particles2inject*nproc
     
       call random_number(ran1)
       call random_number(ran2)
@@ -1716,6 +1767,7 @@ module particle
           z>=lzmin(nrank) .and. z<lzmax(nrank) ) then
     
         p=p+1
+        global_particle_id=global_particle_id+1
     
         call particle_new(p)%init()
     
@@ -1723,14 +1775,20 @@ module particle
         particle_new(p)%x(2)=y
         particle_new(p)%x(3)=z
     
-        particle_new(p)%v(1)   =0._mytype
-        particle_new(p)%v(2)   =0._mytype
-        particle_new(p)%v(3)   =0._mytype
+        particle_new(p)%v(1)=0._mytype
+        particle_new(p)%v(2)=0._mytype
+        particle_new(p)%v(3)=0._mytype
     
         particle_new(p)%inactive=.false.
+        
+        particle_new(p)%id=global_particle_id+nrank*1000000
     
       endif
-    
+
+      !print*,'** rank',nrank,':',p,j
+      
+      if(p==local_size) exit
+      
     enddo
     
     call mclean(particle_new,p)
@@ -1738,6 +1796,8 @@ module particle
     particle_size=p
 
     deallocate(seed)
+    
+    if(p<local_size) print*,'** rank',nrank,':',p
     
   end subroutine particle_gen_random
 
@@ -1757,7 +1817,6 @@ module particle
     real(mytype) :: x,y,z,detalx,detaly,detalz
     real(mytype) :: plx,ply,plz
     
-
     plx=particle_range(2)-particle_range(1)
     ply=particle_range(4)-particle_range(3)
     plz=particle_range(6)-particle_range(5)
@@ -1776,6 +1835,8 @@ module particle
 
     allocate(particle_new(max_n_particles))
     
+    if(global_particle_id>=1000000) global_particle_id=0
+    
     p=0
     do k=1,npz
     do j=1,npy
@@ -1790,6 +1851,7 @@ module particle
           z>=lzmin(nrank) .and. z<lzmax(nrank) ) then
     
         p=p+1
+        global_particle_id=global_particle_id+1
     
         call particle_new(p)%init()
     
@@ -1802,6 +1864,8 @@ module particle
         particle_new(p)%v(3) = 0._mytype
     
         particle_new(p)%inactive=.false.
+        
+        particle_new(p)%id=global_particle_id+nrank*1000000
     
       endif
     
@@ -1990,7 +2054,7 @@ module particle
 
       if(npart>npexit) exit
 
-      if(pa%x(1)<0._mytype) then
+      if(pa%x(1)<0) then
 
         ! xmin face
         call particle_bc(face=1,bctype=bc_particle(1),particle=pa,particle_deduce=counter)
@@ -2002,7 +2066,7 @@ module particle
       
       endif
 
-      if(pa%x(2)<0._mytype) then
+      if(pa%x(2)<0) then
 
         ! ymin face
         call particle_bc(face=3,bctype=bc_particle(3),particle=pa,particle_deduce=counter)
@@ -2014,7 +2078,7 @@ module particle
       
       endif
 
-      if(pa%x(3)<0._mytype) then
+      if(pa%x(3)<0) then
 
         ! zmin face
         call particle_bc(face=5,bctype=bc_particle(5),particle=pa,particle_deduce=counter)
@@ -2087,7 +2151,8 @@ module particle
     integer,intent(inout) :: particle_deduce
 
     ! local data
-    real(mytype), dimension(6), save :: bcord, lenpe
+    real(mytype) :: iface
+    real(mytype),save :: bcord(6)
     logical,save :: firstcal=.true.
     integer :: idir
     
@@ -2100,15 +2165,6 @@ module particle
         bcord(5)=0.0_mytype
         bcord(6)=zlz
 
-        ! lenpe is to get the particle back to the domain for periodic boundaries.
-        ! defined as the distance (+ or -) between the two paring periodic boundaries.
-        lenpe(1)=xlx
-        lenpe(2)=-xlx
-        lenpe(3)=yly
-        lenpe(4)=-yly
-        lenpe(5)=zlz
-        lenpe(6)=-zlz
-
         firstcal=.false.
     endif
 
@@ -2119,8 +2175,14 @@ module particle
         call decomp_2d_abort(1,"idir error @ particle_bc")
     endif
 
+    if(mod(face,2)==0) then
+        iface=-1._mytype
+    else
+        iface= 1._mytype
+    endif
+
     if(bctype=='periodic') then
-        particle%x(idir)=particle%x(idir)+lenpe(face)
+        particle%x(idir)=particle%x(idir)+bcord(face)*iface
     elseif(bctype=='reflective') then
         particle%x(idir)=-particle%x(idir)+2.0_mytype*bcord(face)
     elseif(bctype=='outflow') then

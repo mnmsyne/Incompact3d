@@ -15,6 +15,10 @@ module case
   use channel
   use mixlayer
   use gravitycur
+  use tempjet
+  use planejet
+  use swirljet
+  use impingjet
   use tbl
   use abl
   use uniform
@@ -22,6 +26,7 @@ module case
   use cavity
   use pipe
   use ptbl
+  use pjsf
 
   use var, only : nzmsize
 
@@ -91,6 +96,22 @@ contains
 
        call init_mixlayer(rho1, ux1, uy1, uz1)
 
+    elseif (itype.eq.itype_tempjet) then
+
+       call init_tempjet(ux1, uy1, uz1, ep1, phi1)
+    
+    elseif (itype.eq.itype_planejet) then
+
+       call init_planejet (ux1, uy1, uz1, phi1)
+       
+    elseif (itype.eq.itype_swirljet) then
+
+       call init_swirljet (ux1, uy1, uz1, phi1)
+
+    elseif (itype.eq.itype_impingjet) then
+
+       call init_impingjet (ux1, uy1, uz1, phi1)
+
     elseif (itype.eq.itype_tbl) then
 
        call init_tbl (ux1, uy1, uz1, ep1, phi1)
@@ -115,9 +136,13 @@ contains
 
        call init_pipe(ux1, uy1, uz1, ep1, phi1)
 
-       elseif (itype.eq.itype_ptbl) then
+    elseif (itype.eq.itype_ptbl) then
 
        call init_ptbl(ux1, uy1, uz1, phi1)
+       
+    elseif (itype.eq.itype_pjsf) then
+
+       call init_pjsf(ux1, uy1, uz1, phi1)
 
     else
   
@@ -155,6 +180,10 @@ contains
         call particle_init(pxmin=0.1_mytype,pxmax=0.1_mytype, &
                            pzmin=1.5_mytype,pzmax=1.5_mytype)
 
+      case(itype_cyl)
+
+        call particle_init(pxmin=0.0_mytype,pxmax=0.0_mytype)
+                           
       case default
 
         call particle_init()
@@ -196,6 +225,18 @@ contains
 
        call boundary_conditions_cyl (ux, uy, uz, phi)
 
+    elseif (itype.eq.itype_planejet) then
+
+       call boundary_conditions_planejet (ux, uy, uz, phi)
+       
+    elseif (itype.eq.itype_swirljet) then
+
+       call boundary_conditions_swirljet (ux, uy, uz, phi)
+
+    elseif (itype.eq.itype_impingjet) then
+
+       call boundary_conditions_impingjet (ux, uy, uz, phi)
+
     elseif (itype.eq.itype_tbl) then
 
        call boundary_conditions_tbl (ux, uy, uz, phi)
@@ -224,6 +265,10 @@ contains
 
        call boundary_conditions_ptbl(ux, uy, uz, phi)
 
+    elseif (itype.eq.itype_pjsf) then
+
+       call boundary_conditions_pjsf(ux, uy, uz, phi)
+       
     endif
 
   end subroutine boundary_conditions
@@ -381,10 +426,30 @@ contains
     elseif (itype.eq.itype_pipe) then
 
        call postprocess_pipe(ux, uy, uz, pp, phi, ep)
+       
+    elseif (itype.eq.itype_tempjet) then
+
+       call postprocess_tempjet(ux, uy, uz, pp, phi, ep)
+
+    elseif (itype.eq.itype_planejet) then
+
+       call postprocess_planejet(ux, uy, uz, pp, phi, ep)
+       
+    elseif (itype.eq.itype_swirljet) then
+
+       call postprocess_swirljet(ux, uy, uz, pp, phi, ep)
+
+    elseif (itype.eq.itype_impingjet) then
+
+       call postprocess_impingjet(ux, uy, uz, pp, phi, ep)
 
     elseif (itype.eq.itype_ptbl) then
       
        call postprocess_ptbl (ux, uy, uz, pp, phi, ep)
+       
+    elseif (itype.eq.itype_pjsf) then
+      
+       call postprocess_pjsf (ux, uy, uz, pp, phi, ep)
 
     endif
 
@@ -428,6 +493,22 @@ contains
     else if (itype .eq. itype_gravitycur) then
 
        call visu_gravitycur_init(case_visu_init)
+       
+    else if (itype .eq. itype_tempjet) then
+
+       call visu_tempjet_init(case_visu_init)
+
+    else if (itype .eq. itype_planejet) then
+
+       call visu_planejet_init(case_visu_init)
+       
+    else if (itype .eq. itype_swirljet) then
+
+       call visu_swirljet_init(case_visu_init)  
+
+    else if (itype .eq. itype_impingjet) then
+
+       call visu_impingjet_init(case_visu_init)  
 
     else if (itype .eq. itype_uniform) then
 
@@ -436,6 +517,10 @@ contains
     else if (itype .eq. itype_ptbl) then
 
        call visu_ptbl_init(case_visu_init)
+       
+    else if (itype .eq. itype_pjsf) then
+
+       call visu_pjsf_init(case_visu_init)
 
     end if
     
@@ -497,6 +582,26 @@ contains
 
        call visu_cyl(ux1, uy1, uz1, pp3, phi1, ep1, num)
        called_visu = .true.
+       
+    elseif (itype.eq.itype_tempjet) then
+
+       call visu_tempjet(ux1, uy1, uz1, pp3, phi1, ep1, num)
+       called_visu = .true.
+ 
+    elseif (itype.eq.itype_planejet) then
+
+       call visu_planejet(ux1, uy1, uz1, pp3, phi1, ep1, num)
+       called_visu = .true.
+       
+    elseif (itype.eq.itype_swirljet) then
+
+       call visu_swirljet(ux1, uy1, uz1, pp3, phi1, ep1, num)
+       called_visu = .true.       
+
+    elseif (itype.eq.itype_impingjet) then
+
+       call visu_impingjet(ux1, uy1, uz1, pp3, phi1, ep1, num)
+       called_visu = .true. 
 
     elseif (itype.eq.itype_tbl) then
 
@@ -513,6 +618,11 @@ contains
        call visu_ptbl(ux1, uy1, uz1, pp3, phi1, ep1, num)
        called_visu = .true.
 
+    elseif (itype.eq.itype_pjsf) then
+
+       call visu_pjsf(ux1, uy1, uz1, pp3, phi1, ep1, num)
+       called_visu = .true.
+       
     endif
 
     if (called_visu .and. (.not. case_visu_init)) then
@@ -557,6 +667,14 @@ contains
     elseif (itype.eq.itype_ptbl) then
 
        call momentum_forcing_ptbl(dux1, duy1, duz1, ux1, uy1, uz1, phi1)
+
+    elseif (itype.eq.itype_impingjet) then
+
+       call momentum_forcing_impingjet(dux1, duy1, duz1, ux1, uy1, uz1)
+
+    elseif (itype.eq.itype_pjsf) then
+
+       call momentum_forcing_pjsf(dux1, duy1, duz1, ux1, uy1, uz1)
 
     endif
 

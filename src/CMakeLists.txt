@@ -21,14 +21,19 @@ add_executable(xcompact3d
                     Case-Cylinder-wake.f90
                     Case-Generic.f90
                     Case-Gravity-current.f90
+                    Case-Imping-Jet.f90
                     Case-Mixing-layer.f90
                     Case-Periodic-hill.f90
                     Case-Pipe-flow.f90
+                    Case-Plane-Jet.f90
                     Case-Sandbox.f90
+                    Case-Swirl-Jet.f90
                     Case-TBL.f90
+                    Case-Temp-Jet.f90
                     Case-TGV.f90
                     Case-Uniform.f90
                     Case-PTBL.f90
+                    Case-PJSF.f90
                     case.f90
                     derive.f90
                     dynstall.f90
@@ -49,7 +54,7 @@ add_executable(xcompact3d
                     probes.f90
                     schemes.f90
                     statistics.f90
-		    stretching.f90
+		                stretching.f90
                     time_integrators.f90
                     tools.f90
                     transeq.f90

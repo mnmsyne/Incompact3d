@@ -33,7 +33,7 @@ subroutine parameter(input_i3d)
   use forces, only : iforces, nvol, setup_forces
 
   use mhd, only : mhd_equation,hartmann,stuart,rem
-  use particle, only : initype_particle,n_particles,bc_particle,particle_inject_period
+  use particle, only : initype_particle,n_particles2inject,bc_particle,particle_inject_period
 
   implicit none
 
@@ -49,7 +49,7 @@ subroutine parameter(input_i3d)
        nclx1, nclxn, ncly1, nclyn, nclz1, nclzn, &
        ivisu, ipost, &
        gravx, gravy, gravz, &
-       cpg, idir_stream, &
+       cpg, idir_stream, inflow_offset, theta_jet, &
        ifilter, C_filter, iturbine, mhd_active, particle_active, FreeStream
 
   NAMELIST /NumOptions/ ifirstder, isecondder, itimescheme, iimplicit, &
@@ -69,6 +69,7 @@ subroutine parameter(input_i3d)
   NAMELIST /AdversePresGrad/ APG,APG_DpDX,APG_Beta
   NAMELIST /ProbeSpectra/ Pro_Spectra,X_Pro_Spectra,Z_Pro_Spectra
   NAMELIST /Tripping/ itrip,A_tr,xs_tr_tbl,ys_tr_tbl,ts_tr_tbl,x0_tr_tbl
+  NAMELIST /Oscillation/ ioscl, dir_oscl, A_oscl, freq_oscl, oscl_time
   NAMELIST /ibmstuff/ cex,cey,cez,ra,rai,rao,nobjmax,nraf,nvol,iforces, npif, izap, ianal, imove, thickness, chord, omega ,ubcx,ubcy,ubcz,rads, c_air
   NAMELIST /LMN/ dens1, dens2, prandtl, ilmn_bound, ivarcoeff, ilmn_solve_temp, &
        massfrac, mol_weight, imultispecies, primary_species, &
@@ -83,7 +84,7 @@ subroutine parameter(input_i3d)
      nclxBx1, nclxBxn, nclyBx1, nclyBxn, nclzBx1, nclzBxn, &
      nclxBy1, nclxByn, nclyBy1, nclyByn, nclzBy1, nclzByn, &
      nclxBz1, nclxBzn, nclyBz1, nclyBzn, nclzBz1, nclzBzn
-  NAMELIST/ParTrack/initype_particle,n_particles,bc_particle,particle_inject_period
+  NAMELIST/ParTrack/initype_particle,n_particles2inject,bc_particle,particle_inject_period
 
 
 #ifdef DEBG
@@ -137,9 +138,6 @@ subroutine parameter(input_i3d)
   nclxS1 = nclx1; nclxSn = nclxn
   nclyS1 = ncly1; nclySn = nclyn
   nclzS1 = nclz1; nclzSn = nclzn
-
-  !! set periodic direction
-  periodic_bc = (/nclx1.eq.0, ncly1.eq.0, nclz1.eq.0/)
   
   if (numscalar.ne.0) then
      iscalar = 1
@@ -246,24 +244,31 @@ subroutine parameter(input_i3d)
   endif
   
   !!==> Pasha
-  if(itype .eq. 15) then
+  if(itype .eq. itype_ptbl) then
      read(10, nml=ThetaDotModel); rewind(10)
      read(10, nml=BlowingModel); rewind(10)
      read(10, nml=AdversePresGrad); rewind(10)
      read(10, nml=ProbeSpectra); rewind(10)
   end if
-
+  
+  if (itype.eq.itype_pjsf) then
+     read(10, nml=Oscillation); rewind(10)
+  endif
+  
   if (itype.eq.itype_tbl) then
      read(10, nml=Tripping); rewind(10)
   endif
+  
   if (itype.eq.itype_abl) then
      read(10, nml=ABL); rewind(10)
   endif
+  
   if (iturbine.eq.1) then
      read(10, nml=ALMParam); rewind(10)
   else if (iturbine.eq.2) then
      read(10, nml=ADMParam); rewind(10)
   endif
+  
   ! read(10, nml=TurbulenceWallModel)
   read(10, nml=CASE); rewind(10) !! Read case-specific variables
   close(10)
@@ -385,6 +390,14 @@ subroutine parameter(input_i3d)
         print *,'Simulating cylinder'
      elseif (itype.eq.itype_mixlayer) then
         print *,'Mixing layer'
+     elseif (itype.eq.itype_tempjet) then
+        print *,'Temporal plane jet'
+     elseif (itype.eq.itype_planejet) then
+        print *,'Plane jet'
+     elseif (itype.eq.itype_swirljet) then
+        print *,'Swirling jet'
+     elseif (itype.eq.itype_impingjet) then
+        print *,'Impinging jet'
      elseif (itype.eq.itype_tbl) then
         print *,'Turbulent boundary layer'
      elseif (itype.eq.itype_abl) then
@@ -397,6 +410,8 @@ subroutine parameter(input_i3d)
         print *,'Cavity'  
      elseif (itype.eq.itype_ptbl) then
         print *,'Temporal turbulent boundary layer' 
+     elseif (itype.eq.itype_pjsf) then
+        print *,'Plane jet with spanwise forcing' 
      else
         print *,'Unknown itype: ', itype
         stop
@@ -527,6 +542,17 @@ subroutine parameter(input_i3d)
          write(*,"(' Probe Location (Z)        : ',F12.6)") Z_Pro_Spectra
       endif
 
+      write(*,*) '==========================================================='
+      if (ioscl==0) then 
+         write(*,"(' Oscillation               : ',A10)") "Off"
+      elseif (ioscl==1) then
+         write(*,"(' Oscillation               : ',A10)") "On"
+         write(*,"(' Oscillation Direction     : ',I17)") dir_oscl
+         write(*,"(' Oscillation Amplitude     : ',F12.6)") A_oscl
+         write(*,"(' Oscillation Frequency     : ',F12.6)") freq_oscl
+         write(*,"(' Oscillation Start Time    : ',I17)") oscl_time
+      endif
+      
      write(*,*) '==========================================================='
      write(*,"(' ifirst                 : ',I17)") ifirst
      write(*,"(' ilast                  : ',I17)") ilast
@@ -689,7 +715,7 @@ subroutine parameter_defaults()
   use forces, only : iforces, nvol
 
   use mhd, only: mhd_equation, rem, stuart, hartmann 
-  use particle, only : initype_particle,n_particles,bc_particle,particle_inject_period
+  use particle, only : initype_particle,n_particles2inject,bc_particle,particle_inject_period
 
   implicit none
 
@@ -724,7 +750,7 @@ subroutine parameter_defaults()
   ! particle tracking
   particle_active =.false.
   initype_particle = 'uniform'
-  n_particles = 0
+  n_particles2inject = 0
   bc_particle = (/"periodic","periodic","periodic","periodic","periodic","periodic"/)
   particle_inject_period = 0.0
 
@@ -782,6 +808,9 @@ subroutine parameter_defaults()
   !! Pipe
   rai = -1.0 !inner radius
   rao = -1.0 !outer radius
+  
+  inflow_offset = 0.0
+  theta_jet = 0.0
 
   !! Filter
   ifilter=0
@@ -844,7 +873,5 @@ subroutine parameter_defaults()
   ys_tr_tbl=0.350508_mytype
   ts_tr_tbl=1.402033_mytype
   x0_tr_tbl=3.505082_mytype
-
-  periodic_bc=.false.
 
 end subroutine parameter_defaults

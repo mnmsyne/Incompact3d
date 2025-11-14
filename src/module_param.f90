@@ -304,6 +304,11 @@ module param
        itype_hill = 4, &
        itype_cyl = 5, &
        itype_mixlayer = 7, &
+       itype_tempjet = 71, &
+       itype_planejet = 72, &
+       itype_pjsf = 721, &
+       itype_swirljet = 73, &
+       itype_impingjet = 74, &
        itype_tbl = 9, &
        itype_abl = 10, &
        itype_uniform = 11, &
@@ -328,6 +333,7 @@ module param
   real(mytype) :: wrotation,ro
   real(mytype) :: dens1, dens2
   real(mytype) :: C_filter
+  real(mytype) :: inflow_offset, theta_jet
   character(len=512) :: inflowpath
   logical :: validation_restart
   logical :: mhd_active,particle_active
@@ -386,6 +392,10 @@ module param
   !! Gravity field (vector components)
   real(mytype) :: gravx, gravy, gravz
 
+  !! Oscillation
+  integer :: ioscl, oscl_time, dir_oscl
+  real(mytype) :: A_oscl, freq_oscl
+  
   !! LMN
   logical :: ilmn, ilmn_bound, ilmn_solve_temp
   real(mytype) :: pressure0, prandtl, Fr
@@ -538,8 +548,6 @@ module param
   real(mytype),parameter :: twopi=two*acos(-one)
 #endif
 
-  logical :: periodic_bc(3)
-  
 end module param
 !############################################################################
 !############################################################################
