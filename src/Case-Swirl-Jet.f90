@@ -16,9 +16,13 @@ module swirljet
   PUBLIC :: init_swirljet, boundary_conditions_swirljet, postprocess_swirljet, &
             visu_swirljet, visu_swirljet_init
 
+  ! P. Moise and J. Mathew,
+  ! Hysteresis and turbulent vortex breakdown in transitional swirling jets,
+  ! J. Fluid Mech. 915, A94 (2021).
+
 contains
 
-  subroutine boundary_conditions_swirljet (ux,uy,uz,phi)
+  subroutine boundary_conditions_swirljet (ux, uy, uz, phi)
 
     USE param
     USE variables
@@ -33,6 +37,7 @@ contains
 
     return
   end subroutine boundary_conditions_swirljet
+  !########################################################################
   
   subroutine inflow (phi)
 
@@ -87,6 +92,7 @@ contains
 
     return
   end subroutine inflow
+  !########################################################################
 
   subroutine outflow (ux, uy, uz, phi)
 
@@ -97,18 +103,18 @@ contains
 
     implicit none
 
-    integer :: j,k,code
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
+    integer :: j, k, code
+    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-    real(mytype) :: udx,udy,udz,uddx,uddy,uddz,cx,uxmin,uxmax
+    real(mytype) :: udx, udy, udz, uddx, uddy, uddz, cx, uxmin, uxmax
 
     udx = one/dx; udy = one/dy; udz = one/dz;
     uddx = half/dx; uddy = half/dy; uddz = half/dz
 
     uxmax = -1609._mytype
     uxmin = 1609._mytype
-    do k=1,xsize(3)
-       do j=1,xsize(2)
+    do k = 1, xsize(3)
+       do j = 1, xsize(2)
           if (ux(nx-1,j,k).gt.uxmax) uxmax = ux(nx-1,j,k)
           if (ux(nx-1,j,k).lt.uxmin) uxmin = ux(nx-1,j,k)
        enddo
@@ -117,11 +123,11 @@ contains
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,code)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,code)
 
-    if (u1 == zero) then
+    if (u1.eq.zero) then
        cx = (half*(uxmax+uxmin))*gdt(itr)*udx
-    elseif (u1 == one) then
+    elseif (u1.eq.one) then
        cx = uxmax*gdt(itr)*udx
-    elseif (u1 == two) then
+    elseif (u1.eq.two) then
        cx = u2*gdt(itr)*udx
     else
        cx = uxmax*gdt(itr)*udx
@@ -135,15 +141,14 @@ contains
        enddo
     enddo
 
-    if (iscalar==1) then
-       if (u2==zero) then
+    if (iscalar.eq.1) then
+       if (u2.eq.zero) then
           cx = (half*(uxmax+uxmin))*gdt(itr)*udx
-       elseif (u2==one) then
+       elseif (u2.eq.one) then
           cx = uxmax*gdt(itr)*udx
-       elseif (u2==two) then
-          cx = u2*gdt(itr)*udx    !works better
+       elseif (u2.eq.two) then
+          cx = u2*gdt(itr)*udx
        else
-          !stop
           cx = uxmax*gdt(itr)*udx
        endif
 
@@ -154,11 +159,12 @@ contains
        enddo
     endif
 
-    if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &
+    if (nrank==0 .and. (mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &
        write(*,*) "Outflow velocity ux nx=n min max=",real(uxmin,4),real(uxmax,4)
 
     return
   end subroutine outflow
+  !########################################################################
 
   subroutine init_swirljet (ux1, uy1, uz1, phi1)
 
@@ -234,7 +240,7 @@ contains
        enddo
     enddo
 
-    if (iscalar==1) then
+    if (iscalar.eq.1) then
        do k = 1, xsize(3)
           z = (k+xstart(3)-2)*dz-zlz/two
           do j = 1, xsize(2)
@@ -256,8 +262,9 @@ contains
 
     return
   end subroutine init_swirljet
+  !########################################################################
 
-  subroutine postprocess_swirljet (ux1,uy1,uz1,pp3,phi1,ep1)
+  subroutine postprocess_swirljet (ux1, uy1, uz1, pp3, phi1, ep1)
 
     use var, ONLY : nzmsize
     implicit none
@@ -267,6 +274,7 @@ contains
     real(mytype), intent(in), dimension(ph1%zst(1):ph1%zen(1),ph1%zst(2):ph1%zen(2),nzmsize,npress) :: pp3
 
   end subroutine postprocess_swirljet
+  !########################################################################
 
   subroutine visu_swirljet_init (visu_initialised)
 
@@ -283,6 +291,7 @@ contains
     visu_initialised = .true.
     
   end subroutine visu_swirljet_init
+  !########################################################################
   
   subroutine visu_swirljet (ux1, uy1, uz1, pp3, phi1, ep1, num)
 
@@ -430,6 +439,7 @@ contains
     call write_field(utheta, ".", "utheta", num)
 
   end subroutine visu_swirljet
+  !########################################################################
   
   subroutine swap(a,b)
   
@@ -442,5 +452,6 @@ contains
     b = Temp
 
   end subroutine swap
+  !########################################################################
 
 end module swirljet

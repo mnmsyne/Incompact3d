@@ -2,7 +2,7 @@
 !This file is part of Xcompact3d (xcompact3d.com)
 !SPDX-License-Identifier: BSD 3-Clause
 
-module pjsf
+module walljet
 
   USE decomp_2d_constants
   USE decomp_2d_mpi
@@ -13,25 +13,24 @@ module pjsf
   IMPLICIT NONE
 
   PRIVATE !! All functions/subroutines private by default
-  PUBLIC :: init_pjsf, boundary_conditions_pjsf, momentum_forcing_pjsf, &
-            postprocess_pjsf, visu_pjsf, visu_pjsf_init
+  PUBLIC :: init_walljet, boundary_conditions_walljet, momentum_forcing_walljet, &
+            postprocess_walljet, visu_walljet, visu_walljet_init
 
 contains
 
-  !############################################################################
-  subroutine boundary_conditions_pjsf (ux,uy,uz,phi)
+  subroutine boundary_conditions_walljet (ux, uy, uz, phi)
 
     USE param
     USE variables
 
     implicit none
 
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
+    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-    integer  :: i,j,k,is
+    integer  :: i, j, k, is
 
     call inflow (phi)
-    call outflow (ux,uy,uz,phi)
+    call outflow (ux, uy, uz, phi)
     
     !Bottom
     if (ncly1 == 2) then
@@ -56,10 +55,9 @@ contains
     endif
     
     return
-  end subroutine boundary_conditions_pjsf
+  end subroutine boundary_conditions_walljet
   !############################################################################
   
-  !############################################################################
   subroutine inflow (phi)
 
     USE param
@@ -68,7 +66,7 @@ contains
 
     implicit none
 
-    integer  :: j,k,is
+    integer  :: j, k, is
     real(mytype) :: y, ym, um
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
     
@@ -76,29 +74,29 @@ contains
     call random_number(byo)
     call random_number(bzo)
     
-    ym=yly/2.
-    if (u2>zero) ym=half-half*four*theta_jet*atanh(two*u2-one)-inflow_offset
+    ym = yly/two
+    if (u2>zero) ym = half-half*four*theta_jet*atanh(two*u2-one)-inflow_offset
     
-    do k=1,xsize(3)
-       do j=1,xsize(2)
-          if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/2.
-          if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/2.
-          um=half+half*tanh((one-two*sqrt((y+inflow_offset)**two))/four/theta_jet)
-          bxx1(j,k)=u1*(half+half*tanh((one-two*sqrt((y+inflow_offset)**two))/four/theta_jet)) &
-                   +(bxo(j,k)-half)*um*inflow_noise
-          bxy1(j,k)=zero+(byo(j,k)-half)*um*inflow_noise
-          bxz1(j,k)=zero+(bzo(j,k)-half)*um*inflow_noise
-          if (y>ym) bxx1(j,k)=u2+(bxo(j,k)-half)*um*inflow_noise
+    do k = 1, xsize(3)
+       do j = 1, xsize(2)
+          if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
+          if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
+          um = half+half*tanh((one-two*sqrt((y+inflow_offset)**two))/four/theta_jet)
+          bxx1(j,k) = u1*(half+half*tanh((one-two*sqrt((y+inflow_offset)**two))/four/theta_jet)) &
+                      + (bxo(j,k)-half)*um*inflow_noise
+          bxy1(j,k) = zero+(byo(j,k)-half)*um*inflow_noise
+          bxz1(j,k) = zero+(bzo(j,k)-half)*um*inflow_noise
+          if (y>ym) bxx1(j,k) = u2+(bxo(j,k)-half)*um*inflow_noise
        enddo
     enddo
 
     if (iscalar.eq.1) then
-       do is=1, numscalar
-          do k=1,xsize(3)
-             do j=1,xsize(2)
-                if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/2.
-                if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/2.
-                phi(1,j,k,is)=cp(is)*(half+half*tanh((one-two*sqrt((y+inflow_offset)**two))/four/theta_jet))
+       do is = 1, numscalar
+          do k = 1, xsize(3)
+             do j = 1, xsize(2)
+                if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
+                if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
+                phi(1,j,k,is) = cp(is)*(half+half*tanh((one-two*sqrt((y+inflow_offset)**two))/four/theta_jet))
              enddo
           enddo
        enddo
@@ -108,8 +106,7 @@ contains
   end subroutine inflow
   !############################################################################
 
-  !############################################################################
-  subroutine outflow (ux,uy,uz,phi)
+  subroutine outflow (ux, uy, uz, phi)
 
     USE param
     USE variables
@@ -118,72 +115,71 @@ contains
 
     implicit none
 
-    integer :: j,k,code
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
+    integer :: j, k, code
+    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-    real(mytype) :: udx,udy,udz,uddx,uddy,uddz,cx,uxmin,uxmax
+    real(mytype) :: udx, udy, udz, uddx, uddy, uddz, cx, uxmin, uxmax
 
-    udx=one/dx; udy=one/dy; udz=one/dz; uddx=half/dx; uddy=half/dy; uddz=half/dz
+    udx=one/dx; udy=one/dy; udz=one/dz; 
+    uddx=half/dx; uddy=half/dy; uddz=half/dz
 
-    uxmax=-1609._mytype
-    uxmin=1609._mytype
-    do k=1,xsize(3)
-       do j=1,xsize(2)
-          if (ux(nx-1,j,k).gt.uxmax) uxmax=ux(nx-1,j,k)
-          if (ux(nx-1,j,k).lt.uxmin) uxmin=ux(nx-1,j,k)
+    uxmax = -1609._mytype
+    uxmin = 1609._mytype
+
+    do k = 1, xsize(3)
+       do j = 1, xsize(2)
+          if (ux(nx-1,j,k).gt.uxmax) uxmax = ux(nx-1,j,k)
+          if (ux(nx-1,j,k).lt.uxmin) uxmin = ux(nx-1,j,k)
        enddo
     enddo
 
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,code)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,code)
 
-    if (u1 == zero) then
-       cx=(half*(uxmax+uxmin))*gdt(itr)*udx
-    elseif (u1 == one) then
-       cx=uxmax*gdt(itr)*udx
-    elseif (u1 == two) then
-       cx=u2*gdt(itr)*udx    !works better
+    if (u1.eq.zero) then
+       cx = (half*(uxmax+uxmin))*gdt(itr)*udx
+    elseif (u1.eq.one) then
+       cx = uxmax*gdt(itr)*udx
+    elseif (u1.eq.two) then
+       cx = u2*gdt(itr)*udx
     else
-       !cx=(half*(u1+u2))*gdt(itr)*udx
        cx=uxmax*gdt(itr)*udx
     endif
 
-    do k=1,xsize(3)
-       do j=1,xsize(2)
-          bxxn(j,k)=ux(nx,j,k)-cx*(ux(nx,j,k)-ux(nx-1,j,k))
-          bxyn(j,k)=uy(nx,j,k)-cx*(uy(nx,j,k)-uy(nx-1,j,k))
-          bxzn(j,k)=uz(nx,j,k)-cx*(uz(nx,j,k)-uz(nx-1,j,k))
+    do k = 1, xsize(3)
+       do j = 1, xsize(2)
+          bxxn(j,k) = ux(nx,j,k)-cx*(ux(nx,j,k)-ux(nx-1,j,k))
+          bxyn(j,k) = uy(nx,j,k)-cx*(uy(nx,j,k)-uy(nx-1,j,k))
+          bxzn(j,k) = uz(nx,j,k)-cx*(uz(nx,j,k)-uz(nx-1,j,k))
        enddo
     enddo
 
-    if (iscalar==1) then
-       if (u2==zero) then
-          cx=(half*(uxmax+uxmin))*gdt(itr)*udx
-       elseif (u2==one) then
-          cx=uxmax*gdt(itr)*udx
-       elseif (u2==two) then
-          cx=u2*gdt(itr)*udx    !works better
+    if (iscalar.eq.1) then
+       if (u2.eq.zero) then
+          cx = (half*(uxmax+uxmin))*gdt(itr)*udx
+       elseif (u2.eq.one) then
+          cx = uxmax*gdt(itr)*udx
+       elseif (u2.eq.two) then
+          cx = u2*gdt(itr)*udx
        else
-          !stop
-          cx=uxmax*gdt(itr)*udx
+          cx = uxmax*gdt(itr)*udx
        endif
 
-       do k=1,xsize(3)
-          do j=1,xsize(2)
-             phi(nx,j,k,:)=phi(nx,j,k,:)-cx*(phi(nx,j,k,:)-phi(nx-1,j,k,:))
+       do k = 1, xsize(3)
+          do j = 1, xsize(2)
+             phi(nx,j,k,:) = phi(nx,j,k,:)-cx*(phi(nx,j,k,:)-phi(nx-1,j,k,:))
           enddo
        enddo
     endif
 
-    if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &
+    if (nrank==0 .and. (mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &
        write(*,*) "Outflow velocity ux nx=n min max=",real(uxmin,4),real(uxmax,4)
 
     return
   end subroutine outflow
   !############################################################################
 
-  !############################################################################
-  subroutine init_pjsf (ux1,uy1,uz1,phi1)
+  subroutine init_walljet (ux1, uy1, uz1, phi1)
 
     USE decomp_2d_io
     USE variables
@@ -192,19 +188,19 @@ contains
 
     implicit none
 
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1,uy1,uz1
+    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
 
-    real(mytype) :: y,ym,um
-    integer :: i,j,k,is,code,ii
+    real(mytype) :: y, ym, um
+    integer :: i, j, k, is, code, ii
 
     ux1=zero; uy1=zero; uz1=zero
     
-    ym=yly/2.
-    if (u2>zero) ym=half-half*four*theta_jet*atanh(two*u2-one)-inflow_offset
+    ym = yly/two
+    if (u2>zero) ym = half-half*four*theta_jet*atanh(two*u2-one)-inflow_offset
 
-    if (iscalar==1) then
-       do is=1,numscalar
+    if (iscalar.eq.1) then
+       do is = 1, numscalar
           phi1(:,:,:,is) = zero
        enddo
     endif
@@ -213,7 +209,7 @@ contains
     
     if (iin.ne.0) then
        call system_clock(count=code)
-       if (iin.eq.2) code=0
+       if (iin.eq.2) code = 0
        call random_seed(size = ii)
        call random_seed(put = code+63946*(nrank+1)*(/ (i - 1, i = 1, ii) /))
 
@@ -221,36 +217,36 @@ contains
        call random_number(uy1)
        call random_number(uz1)
 
-       do k=1,xsize(3)
-          do j=1,xsize(2)
-             do i=1,xsize(1)
-                ux1(i,j,k)=init_noise*(ux1(i,j,k)-0.5)
-                uy1(i,j,k)=init_noise*(uy1(i,j,k)-0.5)
-                uz1(i,j,k)=init_noise*(uz1(i,j,k)-0.5)
+       do k = 1, xsize(3)
+          do j = 1, xsize(2)
+             do i = 1, xsize(1)
+                ux1(i,j,k) = init_noise*(ux1(i,j,k)-half)
+                uy1(i,j,k) = init_noise*(uy1(i,j,k)-half)
+                uz1(i,j,k) = init_noise*(uz1(i,j,k)-half)
              enddo
           enddo
        enddo
 
        !modulation of the random noise
-       do k=1,xsize(3)
-          do j=1,xsize(2)
-             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/2.
-             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/2.
-             um=half+half*tanh((one-two*sqrt((y+inflow_offset)**two))/four/theta_jet)
-             do i=1,xsize(1)
-                ux1(i,j,k)=um*ux1(i,j,k)
-                uy1(i,j,k)=um*uy1(i,j,k)
-                uz1(i,j,k)=um*uz1(i,j,k)
+       do k = 1, xsize(3)
+          do j = 1, xsize(2)
+             if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
+             um = half+half*tanh((one-two*sqrt((y+inflow_offset)**two))/four/theta_jet)
+             do i = 1, xsize(1)
+                ux1(i,j,k) = um*ux1(i,j,k)
+                uy1(i,j,k) = um*uy1(i,j,k)
+                uz1(i,j,k) = um*uz1(i,j,k)
              enddo
           enddo
        enddo
        
        !INIT FOR G AND U=MEAN FLOW + NOISE
-       do k=1,xsize(3)
-          do j=1,xsize(2)
-             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/2.
-             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/2.
-             do i=1,xsize(1)
+       do k = 1, xsize(3)
+          do j = 1, xsize(2)
+             if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
+             do i = 1, xsize(1)
                 ux1(i,j,k) = ux1(i,j,k) + u1*(half+half*tanh((one-two*sqrt((y+inflow_offset)**two))/four/theta_jet))
                 uy1(i,j,k) = uy1(i,j,k)
                 uz1(i,j,k) = uz1(i,j,k)
@@ -259,13 +255,13 @@ contains
           enddo
        enddo
        
-       if (iscalar==1) then
-          do k=1,xsize(3)
-             do j=1,xsize(2)
-                if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/2.
-                if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/2.
-                do i=1,xsize(1)
-                   do is=1,numscalar
+       if (iscalar.eq.1) then
+          do k = 1, xsize(3)
+             do j = 1, xsize(2)
+                if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
+                if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
+                do i = 1, xsize(1)
+                   do is = 1, numscalar
                       phi1(i,j,k,is) = cp(is)*(half+half*tanh((one-two*sqrt((y+inflow_offset)**two))/four/theta_jet))
                    enddo
                 enddo
@@ -280,37 +276,35 @@ contains
 #endif
 
     return
-  end subroutine init_pjsf
+  end subroutine init_walljet
   !############################################################################
   
-  !############################################################################
-  subroutine momentum_forcing_pjsf(dux1, duy1, duz1, ux1, uy1, uz1)
+  subroutine momentum_forcing_walljet(dux1, duy1, duz1, ux1, uy1, uz1)
 
     implicit none
 
     real(mytype), intent(in), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1
     real(mytype), dimension(xsize(1), xsize(2), xsize(3), ntime) :: dux1, duy1, duz1
     
-    if (ioscl.eq.1 .and. itime >= oscl_time) then
+    if (ioscl==1 .and. itime >= oscl_time) then
        if (nrank==0 .and. (mod(itime, ilist) == 0)) then
           write(*,*) 'Oscillation with amplitude ', A_oscl
           write(*,*) 'Oscillation with frequency ', freq_oscl
           write(*,*) 'Oscillation force: ', A_oscl*sin(two*pi*freq_oscl*t)
        endif
-       if (dir_oscl == 1) then
+       if (dir_oscl.eq.1) then
           dux1(:,:,:,1) = dux1(:,:,:,1) + A_oscl*sin(two*pi*freq_oscl*t)
-       elseif (dir_oscl == 2) then
+       elseif (dir_oscl.eq.2) then
           duy1(:,:,:,1) = duy1(:,:,:,1) + A_oscl*sin(two*pi*freq_oscl*t)
-       elseif (dir_oscl == 3) then
+       elseif (dir_oscl.eq.3) then
           duz1(:,:,:,1) = duz1(:,:,:,1) + A_oscl*sin(two*pi*freq_oscl*t)
        endif
     endif
 
-  end subroutine momentum_forcing_pjsf
-  !############################################################################
+  end subroutine momentum_forcing_walljet
 
   !############################################################################
-  subroutine postprocess_pjsf(ux1,uy1,uz1,pp3,phi1,ep1)
+  subroutine postprocess_walljet(ux1, uy1, uz1, pp3, phi1, ep1)
 
     use var, ONLY : nzmsize
     implicit none
@@ -319,11 +313,10 @@ contains
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
     real(mytype), intent(in), dimension(ph1%zst(1):ph1%zen(1),ph1%zst(2):ph1%zen(2),nzmsize,npress) :: pp3
 
-  end subroutine postprocess_pjsf
-  !############################################################################
+  end subroutine postprocess_walljet
 
   !############################################################################
-  subroutine visu_pjsf_init (visu_initialised)
+  subroutine visu_walljet_init (visu_initialised)
 
     use decomp_2d_io, only : decomp_2d_register_variable
     use visu, only : io_name, output2D
@@ -337,11 +330,10 @@ contains
 
     visu_initialised = .true.
     
-  end subroutine visu_pjsf_init
-  !############################################################################
+  end subroutine visu_walljet_init
   
   !############################################################################
-  subroutine visu_pjsf(ux1, uy1, uz1, pp3, phi1, ep1, num)
+  subroutine visu_walljet(ux1, uy1, uz1, pp3, phi1, ep1, num)
 
     use var, only : ux2, uy2, uz2, ux3, uy3, uz3
     USE var, only : ta1,tb1,tc1,td1,te1,tf1,tg1,th1,ti1,di1
@@ -411,7 +403,7 @@ contains
                  - th1(:,:,:) * tf1(:,:,:)
     call write_field(di1, ".", "critq", num, flush = .true.) ! Reusing temporary array, force flush
 
-  end subroutine visu_pjsf
+  end subroutine visu_walljet
   !############################################################################
   
-end module pjsf
+end module walljet

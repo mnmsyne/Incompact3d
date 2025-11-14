@@ -67,6 +67,7 @@ subroutine parameter(input_i3d)
   NAMELIST /ThetaDotModel/ jtheta_dot,jthickness,Method_FT,K_theta,H_12
   NAMELIST /BlowingModel/ Blowing,A_Blowing,Xst_Blowing,Xen_Blowing,Range_Smooth  
   NAMELIST /AdversePresGrad/ APG,APG_DpDX,APG_Beta
+  NAMELIST /FringeMethod/ ifringe, fringe_beta, fringe_rm
   NAMELIST /ProbeSpectra/ Pro_Spectra,X_Pro_Spectra,Z_Pro_Spectra
   NAMELIST /Tripping/ itrip,A_tr,xs_tr_tbl,ys_tr_tbl,ts_tr_tbl,x0_tr_tbl
   NAMELIST /Oscillation/ ioscl, dir_oscl, A_oscl, freq_oscl, oscl_time
@@ -251,7 +252,11 @@ subroutine parameter(input_i3d)
      read(10, nml=ProbeSpectra); rewind(10)
   end if
   
-  if (itype.eq.itype_pjsf) then
+  if (itype.eq.itype_impingjet) then
+     read(10, nml=FringeMethod); rewind(10)
+  endif
+
+  if (itype.eq.itype_walljet) then
      read(10, nml=Oscillation); rewind(10)
   endif
   
@@ -394,6 +399,8 @@ subroutine parameter(input_i3d)
         print *,'Temporal plane jet'
      elseif (itype.eq.itype_planejet) then
         print *,'Plane jet'
+     elseif (itype.eq.itype_walljet) then
+        print *,'Wall jet' 
      elseif (itype.eq.itype_swirljet) then
         print *,'Swirling jet'
      elseif (itype.eq.itype_impingjet) then
@@ -410,8 +417,6 @@ subroutine parameter(input_i3d)
         print *,'Cavity'  
      elseif (itype.eq.itype_ptbl) then
         print *,'Temporal turbulent boundary layer' 
-     elseif (itype.eq.itype_pjsf) then
-        print *,'Plane jet with spanwise forcing' 
      else
         print *,'Unknown itype: ', itype
         stop
@@ -531,6 +536,15 @@ subroutine parameter(input_i3d)
       elseif (APG==2) then
          write(*,"(' Adverse Pressure Gradient : ',A10)") "On"
          write(*,"(' Beta of Pressure Gradient : ',F12.6)") APG_Beta         
+      endif
+
+      write(*,*) '==========================================================='
+      if (ifringe==0) then 
+         write(*,"(' Fringe Method             : ',A10)") "Off"
+      elseif (ifringe==1) then
+         write(*,"(' Fringe Method             : ',A10)") "On"
+         write(*,"(' Fringe beta               : ',F12.6)") fringe_beta
+         write(*,"(' Fringe rm                 : ',F12.6)") fringe_rm        
       endif
 
       write(*,*) '==========================================================='

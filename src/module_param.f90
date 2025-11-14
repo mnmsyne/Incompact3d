@@ -306,7 +306,7 @@ module param
        itype_mixlayer = 7, &
        itype_tempjet = 71, &
        itype_planejet = 72, &
-       itype_pjsf = 721, &
+       itype_walljet = 721, &
        itype_swirljet = 73, &
        itype_impingjet = 74, &
        itype_tbl = 9, &
@@ -384,6 +384,10 @@ module param
   !Adverse Pressure Gradient
   integer :: APG
   real(mytype) :: APG_DpDX,APG_Beta
+
+  !Fringe Method
+  integer :: ifringe
+  real(mytype) :: fringe_beta, fringe_rm
 
   !Probe for Spectra
   integer :: Pro_Spectra

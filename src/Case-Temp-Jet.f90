@@ -15,9 +15,13 @@ module tempjet
   PRIVATE !! All functions/subroutines private by default
   PUBLIC :: init_tempjet, postprocess_tempjet, visu_tempjet, visu_tempjet_init
 
+  ! M. Hayashi, T. Watanabe, and K. Nagata,
+  ! Characteristics of small-scale shear layers in a temporally evolving turbulent planar jet,
+  ! J. Fluid Mech. 920, A38 (2021).
+
 contains
 
-  subroutine init_tempjet (ux1,uy1,uz1,ep1,phi1)
+  subroutine init_tempjet (ux1, uy1, uz1, ep1, phi1)
 
     use decomp_2d_io
     use param
@@ -26,11 +30,11 @@ contains
 
     implicit none
 
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1,uy1,uz1,ep1
+    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1, ep1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
 
     integer :: i, j, k, ii, is, code
-    real(mytype) :: x, y, z, r, um, zeromach
+    real(mytype) :: x, y, z, r, um
 
     integer :: Nxi, Nyi, Nzi
     real(mytype) :: Delta_in
@@ -48,8 +52,7 @@ contains
     Delta_in = 0.02_mytype
 
     if (iin.eq.1) then !generation of a random noise     
-       call system_clock(count=code)
-       !  if (iin.eq.2) code=0
+       call system_clock(count = code)
        call random_seed(size = ii)
        call random_seed(put = code+63946*(nrank+1)*(/ (i - 1, i = 1, ii) /))
        
@@ -57,29 +60,27 @@ contains
        call random_number(uy1)
        call random_number(uz1)
        
-       do k=1,xsize(3)
-          do j=1,xsize(2)
-             do i=1,xsize(1)
-                ux1(i,j,k)=init_noise*(ux1(i,j,k)-0.5)
-                uy1(i,j,k)=init_noise*(uy1(i,j,k)-0.5)
-                uz1(i,j,k)=init_noise*(uz1(i,j,k)-0.5)
+       do k = 1, xsize(3)
+          do j = 1, xsize(2)
+             do i = 1, xsize(1)
+                ux1(i,j,k) = init_noise*(ux1(i,j,k)-0.5)
+                uy1(i,j,k) = init_noise*(uy1(i,j,k)-0.5)
+                uz1(i,j,k) = init_noise*(uz1(i,j,k)-0.5)
              enddo
           enddo
        enddo
        
        !modulation of the random noise
-       do k=1,xsize(3)
-          z=(k+xstart(3)-2)*dz-zlz/2.
-          do j=1,xsize(2)
-             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/2.
-             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/2.
-            !  r=sqrt(y**two+z**two)
-            !  um=half + half * tanh((one - two * r) / four / theta_jet)
-             um=half + half * tanh((one - two * sqrt(y ** two)) / four / theta_jet)
-             do i=1,xsize(1)
-                ux1(i,j,k)=um*ux1(i,j,k)
-                uy1(i,j,k)=um*uy1(i,j,k)
-                uz1(i,j,k)=um*uz1(i,j,k)
+       do k = 1, xsize(3)
+          z = (k+xstart(3)-2)*dz-zlz/two
+          do j = 1, xsize(2)
+             if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
+             um = half+half*tanh((one-two*sqrt(y*y))/four/theta_jet)
+             do i = 1, xsize(1)
+                ux1(i,j,k) = um*ux1(i,j,k)
+                uy1(i,j,k) = um*uy1(i,j,k)
+                uz1(i,j,k) = um*uz1(i,j,k)
              enddo
           enddo
        enddo
@@ -135,29 +136,26 @@ contains
        deallocate(ux_coarse, uy_coarse, uz_coarse)
        
        !modulation of the random noise
-       do k=1,xsize(3)
-          do j=1,xsize(2)
-             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/2.
-             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/2.
-            !  r=sqrt(y**two+z**two)
-            !  um=half + half * tanh((one - two * r) / four / theta_jet)
-             um=half + half * tanh((one - two * sqrt(y ** two)) / four / theta_jet)
-             do i=1,xsize(1)
-                ux1(i,j,k)=um*ux1(i,j,k)
-                uy1(i,j,k)=um*uy1(i,j,k)
-                uz1(i,j,k)=um*uz1(i,j,k)
+       do k = 1, xsize(3)
+          do j = 1, xsize(2)
+             if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
+             um = half + half * tanh((one - two * sqrt(y * y)) / four / theta_jet)
+             do i = 1 ,xsize(1)
+                ux1(i,j,k) = um*ux1(i,j,k)
+                uy1(i,j,k) = um*uy1(i,j,k)
+                uz1(i,j,k) = um*uz1(i,j,k)
              enddo
           enddo
        enddo
     endif
        
-    do k=1,xsize(3)
-       z=(k+xstart(3)-2)*dz-zlz/2.
-       do j=1,xsize(2)
-          if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/2.
-          if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/2.
-         !  r=sqrt(y**two+z**two)
-          do i=1,xsize(1)
+    do k = 1, xsize(3)
+       z = (k+xstart(3)-2)*dz-zlz/two
+       do j = 1, xsize(2)
+          if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
+          if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
+          do i = 1, xsize(1)
              !! Set mean field
              ux1(i, j, k) = ux1(i, j, k) + half * (u1 + u2) &
                   + half * (u1 - u2) * tanh((one - two * sqrt(y ** two)) / four / theta_jet)
@@ -167,15 +165,14 @@ contains
        enddo
     enddo
     
-    if (iscalar==1) then
-       do k=1,xsize(3)
-          z=(k+xstart(3)-2)*dz-zlz/2.
-          do j=1,xsize(2)
-             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/2.
-             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/2.
-            !  r=sqrt(y**two+z**two)
-             do i=1,xsize(1)
-                do is=1,numscalar
+    if (iscalar.eq.1) then
+       do k = 1, xsize(3)
+          z = (k+xstart(3)-2)*dz-zlz/two
+          do j = 1, xsize(2)
+             if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
+             do i = 1, xsize(1)
+                do is = 1, numscalar
                    phi1(i,j,k,is) = cp(is) * (half &
                        + half * tanh((one - two * sqrt(y ** two)) / four / theta_jet))
                 enddo
@@ -239,8 +236,9 @@ contains
     end function interp3
 
   end subroutine init_tempjet
+  !########################################################################
 
-  subroutine postprocess_tempjet(ux1,uy1,uz1,pp3,phi1,ep1)
+  subroutine postprocess_tempjet(ux1, uy1, uz1, pp3, phi1, ep1)
 
     use var, ONLY : nzmsize
     implicit none
@@ -250,6 +248,7 @@ contains
     real(mytype), intent(in), dimension(ph1%zst(1):ph1%zen(1),ph1%zst(2):ph1%zen(2),nzmsize,npress) :: pp3
 
   end subroutine postprocess_tempjet
+  !########################################################################
 
   subroutine visu_tempjet_init (visu_initialised)
 
@@ -266,6 +265,7 @@ contains
     visu_initialised = .true.
     
   end subroutine visu_tempjet_init
+  !########################################################################
   
   subroutine visu_tempjet(ux1, uy1, uz1, pp3, phi1, ep1, num)
 
@@ -322,6 +322,7 @@ contains
     !du/dx=ta1 du/dy=td1 and du/dz=tg1
     !dv/dx=tb1 dv/dy=te1 and dv/dz=th1
     !dw/dx=tc1 dw/dy=tf1 and dw/dz=ti1
+
     !VORTICITY FIELD
     di1 = zero
     di1(:,:,:)=sqrt(  (tf1(:,:,:)-th1(:,:,:))**2 &
@@ -338,5 +339,6 @@ contains
     call write_field(di1, ".", "critq", num, flush = .true.) ! Reusing temporary array, force flush
 
   end subroutine visu_tempjet
+  !########################################################################
   
 end module tempjet

@@ -17,6 +17,7 @@ module case
   use gravitycur
   use tempjet
   use planejet
+  use walljet
   use swirljet
   use impingjet
   use tbl
@@ -26,7 +27,6 @@ module case
   use cavity
   use pipe
   use ptbl
-  use pjsf
 
   use var, only : nzmsize
 
@@ -140,9 +140,9 @@ contains
 
        call init_ptbl(ux1, uy1, uz1, phi1)
        
-    elseif (itype.eq.itype_pjsf) then
+    elseif (itype.eq.itype_walljet) then
 
-       call init_pjsf(ux1, uy1, uz1, phi1)
+       call init_walljet(ux1, uy1, uz1, phi1)
 
     else
   
@@ -265,9 +265,9 @@ contains
 
        call boundary_conditions_ptbl(ux, uy, uz, phi)
 
-    elseif (itype.eq.itype_pjsf) then
+    elseif (itype.eq.itype_walljet) then
 
-       call boundary_conditions_pjsf(ux, uy, uz, phi)
+       call boundary_conditions_walljet(ux, uy, uz, phi)
        
     endif
 
@@ -447,9 +447,9 @@ contains
       
        call postprocess_ptbl (ux, uy, uz, pp, phi, ep)
        
-    elseif (itype.eq.itype_pjsf) then
+    elseif (itype.eq.itype_walljet) then
       
-       call postprocess_pjsf (ux, uy, uz, pp, phi, ep)
+       call postprocess_walljet (ux, uy, uz, pp, phi, ep)
 
     endif
 
@@ -518,9 +518,9 @@ contains
 
        call visu_ptbl_init(case_visu_init)
        
-    else if (itype .eq. itype_pjsf) then
+    else if (itype .eq. itype_walljet) then
 
-       call visu_pjsf_init(case_visu_init)
+       call visu_walljet_init(case_visu_init)
 
     end if
     
@@ -618,9 +618,9 @@ contains
        call visu_ptbl(ux1, uy1, uz1, pp3, phi1, ep1, num)
        called_visu = .true.
 
-    elseif (itype.eq.itype_pjsf) then
+    elseif (itype.eq.itype_walljet) then
 
-       call visu_pjsf(ux1, uy1, uz1, pp3, phi1, ep1, num)
+       call visu_walljet(ux1, uy1, uz1, pp3, phi1, ep1, num)
        called_visu = .true.
        
     endif
@@ -672,9 +672,9 @@ contains
 
        call momentum_forcing_impingjet(dux1, duy1, duz1, ux1, uy1, uz1)
 
-    elseif (itype.eq.itype_pjsf) then
+    elseif (itype.eq.itype_walljet) then
 
-       call momentum_forcing_pjsf(dux1, duy1, duz1, ux1, uy1, uz1)
+       call momentum_forcing_walljet(dux1, duy1, duz1, ux1, uy1, uz1)
 
     endif
 

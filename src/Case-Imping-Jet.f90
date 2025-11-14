@@ -12,9 +12,15 @@ module impingjet
 
   IMPLICIT NONE
 
+  character(len=*), parameter :: io_jet = "io-jet"
+
   PRIVATE !! All functions/subroutines private by default
   PUBLIC :: boundary_conditions_impingjet, momentum_forcing_impingjet, init_impingjet, &
             postprocess_impingjet, visu_impingjet, visu_impingjet_init
+
+  ! T. Dairay, V. Fortuné, E. Lamballais, and L.-E. Brizzi, 
+  ! Direct numerical simulation of a turbulent jet impinging on a heated wall, 
+  ! J. Fluid Mech. 764, 362 (2015).
 
 contains
 
@@ -26,32 +32,34 @@ contains
 
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-    integer :: isT
+    integer :: is, isT
     real(mytype) :: qflux
 
     !Top boundary (yn)
-    call inflow (ux,uy,uz,phi)
+    call inflow (ux, uy, uz)
 
     !Side boundary (x1,xn,z1,zn)
-    call outflow (ux,uy,uz,phi)
+    call outflow (ux, uy, uz, phi)
 
     !Scalar boundary conditions
     !Top boundary (yn)
     if (iscalar.eq.1) then
        if (xend(2).eq.ny) then
-          ! set all scalar components at top to 0
-          phi(:,xsize(2),:,:) = zero
+          !set all scalar components at top to 0
+          do is = 1, numscalar
+             phi(:,xsize(2),:,is) = zero
+          enddo
        endif
     endif
 
     !Bottom boundary (y1)
     if (iscalar.eq.1) then
        if (xstart(2).eq.1) then
-          ! set all scalar components at bottom to 1
-          phi(:,xstart(2),:,:) = one-exp(-four*t*t)
-          isT = 1
-          qflux = one-exp(-four*t*t)
+          isT = 1; qflux = one-exp(-half*t*t)
           call scalar_neumann (phi,isT,qflux)
+          do is = 2, numscalar
+             phi(:,xstart(2),:,is) = one-exp(-half*t*t)
+          enddo
        endif
     endif
 
@@ -59,14 +67,13 @@ contains
   end subroutine boundary_conditions_impingjet
   !########################################################################
 
-  subroutine inflow (ux, uy, uz, phi)
+  subroutine inflow (ux, uy, uz)
     USE param
     USE variables
 
     implicit none
 
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
 
     integer :: i, k, is, m
     real(mytype) :: x, z, r, theta, delta, sw
@@ -131,7 +138,7 @@ contains
           r = sqrt(x*x+z*z)
           theta = atan2(z,x)
 
-          uxprime = zero; uyprime = zero; uzprime = zero;
+          uxprime = zero; uyprime = zero; uzprime = zero
           if (iin.ne.2) then
             do m = 1, NMODE
                uxprime = uxprime + Amx(m)*cos(m*theta+phx(m))
@@ -178,7 +185,7 @@ contains
 
     implicit none
 
-    integer :: i, j, k, ierr
+    integer :: i, j, k, is, ierr
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
     real(mytype) :: udx, udz, un, cx1, cxn, cz1, czn
@@ -191,7 +198,7 @@ contains
     uz1max = -1609._mytype; uz1min = 1609._mytype;
     uznmax = -1609._mytype; uznmin = 1609._mytype;
 
-    ! x1 (-ex)
+    !x1 (-ex)
     do k = 1, xsize(3)
        do j = 1, xsize(2)
           if (ux(2,j,k).gt.ux1max) ux1max = ux(2,j,k)
@@ -200,33 +207,38 @@ contains
     enddo
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1max,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1min,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
-    cx1 = half*(ux1max+ux1min)*gdt(itr)*udx
-    bxx1(:,:) = ux(1,:,:)-cx1*(ux(2,:,:)-ux(1,:,:))
-    bxy1(:,:) = uy(1,:,:)-cx1*(uy(2,:,:)-uy(1,:,:))
-    bxz1(:,:) = uz(1,:,:)-cx1*(uz(2,:,:)-uz(1,:,:))
-    if (iscalar.eq.1) phi(1,:,:,:) = phi(1,:,:,:)-cx1*(phi(2,:,:,:)-phi(1,:,:,:))
+   !  cx1 = half*(ux1max+ux1min)*gdt(itr)*udx
+   !  bxx1(:,:) = ux(1,:,:)-cx1*(ux(2,:,:)-ux(1,:,:))
+   !  bxy1(:,:) = uy(1,:,:)-cx1*(uy(2,:,:)-uy(1,:,:))
+   !  bxz1(:,:) = uz(1,:,:)-cx1*(uz(2,:,:)-uz(1,:,:))
    !  if (iscalar.eq.1) phi(1,:,:,:) = phi(2,:,:,:)
+    do k = 1, xsize(3)
+       do j = 1, xsize(2)
+          un = -ux(2,j,k)
+          cx1 = un*gdt(itr)*udx
+          if (un.gt.zero) then
+             bxx1(j,k) = ux(1,j,k)-cx1*(ux(2,j,k)-ux(1,j,k))
+             bxy1(j,k) = uy(1,j,k)-cx1*(uy(2,j,k)-uy(1,j,k))
+             bxz1(j,k) = uz(1,j,k)-cx1*(uz(2,j,k)-uz(1,j,k))
+             if (iscalar.eq.1) then
+                do is = 1, numscalar
+                   phi(1,j,k,is) = phi(1,j,k,is)-cx1*(phi(2,j,k,is)-phi(1,j,k,is))
+                enddo
+             endif
+          else
+             bxx1(j,k) = ux(2,j,k)
+             bxy1(j,k) = uy(2,j,k)
+             bxz1(j,k) = uz(2,j,k)
+             if (iscalar.eq.1) then
+                do is = 1, numscalar
+                   phi(1,j,k,is) = phi(2,j,k,is)
+                enddo
+             endif
+          endif
+       enddo
+    enddo
 
-   !  do k = 1, xsize(3)
-   !     do j = 1, xsize(2)
-   !        un = -ux(2,j,k)
-   !        if (un.gt.zero) then
-   !           cc = un*gdt(itr)*udx
-   !           bxx1(j,k) = ux(1,j,k)-cc*(ux(2,j,k)-ux(1,j,k))
-   !           bxy1(j,k) = uy(1,j,k)-cc*(uy(2,j,k)-uy(1,j,k))
-   !           bxz1(j,k) = uz(1,j,k)-cc*(uz(2,j,k)-uz(1,j,k))
-   !           if (iscalar.eq.1) phi(1,j,k,:) = phi(1,j,k,:)-cc*(phi(2,j,k,:)-phi(1,j,k,:))
-   !           if (cc.gt.cxmax) cxmax = cc
-   !        else
-   !           bxx1(j,k) = ux(2,j,k)
-   !           bxy1(j,k) = uy(2,j,k)
-   !           bxz1(j,k) = uz(2,j,k)
-   !           if (iscalar.eq.1) phi(1,j,k,:) = phi(2,j,k,:)
-   !        endif
-   !     enddo
-   !  enddo
-
-    ! xn (+ex)
+    !xn (+ex)
     do k = 1, xsize(3)
        do j = 1, xsize(2)
           if (ux(nx-1,j,k).gt.uxnmax) uxnmax = ux(nx-1,j,k)
@@ -235,33 +247,38 @@ contains
     enddo
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
-    cxn = half*(uxnmax+uxnmin)*gdt(itr)*udx
-    bxxn(:,:) = ux(nx,:,:)-cxn*(ux(nx,:,:)-ux(nx-1,:,:))
-    bxyn(:,:) = uy(nx,:,:)-cxn*(uy(nx,:,:)-uy(nx-1,:,:))
-    bxzn(:,:) = uz(nx,:,:)-cxn*(uz(nx,:,:)-uz(nx-1,:,:))
-    if (iscalar.eq.1) phi(nx,:,:,:) = phi(nx,:,:,:)-cxn*(phi(nx,:,:,:)-phi(nx-1,:,:,:))
+   !  cxn = half*(uxnmax+uxnmin)*gdt(itr)*udx
+   !  bxxn(:,:) = ux(nx,:,:)-cxn*(ux(nx,:,:)-ux(nx-1,:,:))
+   !  bxyn(:,:) = uy(nx,:,:)-cxn*(uy(nx,:,:)-uy(nx-1,:,:))
+   !  bxzn(:,:) = uz(nx,:,:)-cxn*(uz(nx,:,:)-uz(nx-1,:,:))
    !  if (iscalar.eq.1) phi(nx,:,:,:) = phi(nx-1,:,:,:)
+    do k = 1, xsize(3)
+       do j = 1, xsize(2)
+          un = ux(nx-1,j,k)
+          cxn = un*gdt(itr)*udx
+          if (un.gt.zero) then
+             bxxn(j,k) = ux(nx,j,k)-cxn*(ux(nx,j,k)-ux(nx-1,j,k))
+             bxyn(j,k) = uy(nx,j,k)-cxn*(uy(nx,j,k)-uy(nx-1,j,k))
+             bxzn(j,k) = uz(nx,j,k)-cxn*(uz(nx,j,k)-uz(nx-1,j,k))
+             if (iscalar.eq.1) then
+                do is = 1, numscalar
+                   phi(nx,j,k,is) = phi(nx,j,k,is)-cxn*(phi(nx,j,k,is)-phi(nx-1,j,k,is))
+                enddo
+             endif
+          else
+             bxxn(j,k) = ux(nx-1,j,k)
+             bxyn(j,k) = uy(nx-1,j,k)
+             bxzn(j,k) = uz(nx-1,j,k)
+             if (iscalar.eq.1) then
+                do is = 1, numscalar
+                   phi(nx,j,k,is) = phi(nx-1,j,k,is)
+                enddo
+             endif
+          endif
+       enddo
+    enddo
 
-   !  do k = 1, xsize(3)
-   !     do j = 1, xsize(2)
-   !        un = ux(nx-1,j,k)
-   !        if (un.gt.zero) then
-   !           cc = un*gdt(itr)*udx
-   !           bxxn(j,k) = ux(nx,j,k)-cc*(ux(nx,j,k)-ux(nx-1,j,k))
-   !           bxyn(j,k) = uy(nx,j,k)-cc*(uy(nx,j,k)-uy(nx-1,j,k))
-   !           bxzn(j,k) = uz(nx,j,k)-cc*(uz(nx,j,k)-uz(nx-1,j,k))
-   !           if (iscalar.eq.1) phi(nx,j,k,:) = phi(nx,j,k,:)-cc*(phi(nx,j,k,:)-phi(nx-1,j,k,:))
-   !           if (cc.gt.cxmax) cxmax = cc
-   !        else
-   !           bxxn(j,k) = ux(nx-1,j,k)
-   !           bxyn(j,k) = uy(nx-1,j,k)
-   !           bxzn(j,k) = uz(nx-1,j,k)
-   !           if (iscalar.eq.1) phi(nx,j,k,:) = phi(nx-1,j,k,:)
-   !        endif
-   !     enddo
-   !  enddo
-
-    ! z1 (-ez)
+    !z1 (-ez)
     if (xstart(3).eq.1) then
        do j = 1, xsize(2)
           do i = 1, xsize(1)
@@ -272,34 +289,42 @@ contains
     endif
     call MPI_ALLREDUCE(MPI_IN_PLACE,uz1max,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uz1min,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
-    cz1 = half*(uz1max+uz1min)*gdt(itr)*udz
+   !  cz1 = half*(uz1max+uz1min)*gdt(itr)*udz
+   !  if (xstart(3).eq.1) then
+   !     bzx1(:,:) = ux(:,:,1)-cz1*(ux(:,:,2)-ux(:,:,1))
+   !     bzy1(:,:) = uy(:,:,1)-cz1*(uy(:,:,2)-uy(:,:,1))
+   !     bzz1(:,:) = uz(:,:,1)-cz1*(uz(:,:,2)-uz(:,:,1))
+   !     if (iscalar.eq.1) phi(:,:,1,:) = phi(:,:,2,:)
+   !  endif
     if (xstart(3).eq.1) then
-       bzx1(:,:) = ux(:,:,1)-cz1*(ux(:,:,2)-ux(:,:,1))
-       bzy1(:,:) = uy(:,:,1)-cz1*(uy(:,:,2)-uy(:,:,1))
-       bzz1(:,:) = uz(:,:,1)-cz1*(uz(:,:,2)-uz(:,:,1))
-       if (iscalar.eq.1) phi(:,:,1,:) = phi(:,:,1,:)-cz1*(phi(:,:,2,:)-phi(:,:,1,:))
-      !  if (iscalar.eq.1) phi(:,:,1,:) = phi(:,:,2,:)
+       do j = 1, xsize(2)
+          do i = 1, xsize(1)
+             un = -uz(i,j,2)
+             cz1 = un*gdt(itr)*udz
+             if (un.gt.zero) then
+                bzx1(i,j) = ux(i,j,1)-cz1*(ux(i,j,2)-ux(i,j,1))
+                bzy1(i,j) = uy(i,j,1)-cz1*(uy(i,j,2)-uy(i,j,1))
+                bzz1(i,j) = uz(i,j,1)-cz1*(uz(i,j,2)-uz(i,j,1))
+                if (iscalar.eq.1) then
+                   do is = 1, numscalar
+                      phi(i,j,1,is) = phi(i,j,1,is)-cz1*(phi(i,j,2,is)-phi(i,j,1,is))
+                   enddo
+                endif
+             else
+                bzx1(i,j) = ux(i,j,2)
+                bzy1(i,j) = uy(i,j,2)
+                bzz1(i,j) = uz(i,j,2)
+                if (iscalar.eq.1) then
+                   do is = 1, numscalar
+                      phi(i,j,1,is) = phi(i,j,2,is)
+                   enddo
+                endif
+             endif
+          enddo
+       enddo
     endif
 
-   !  do j = 1,xsize(2)
-   !     do i = 1,xsize(1)
-   !        un = -uz(i,j,2)
-   !        if (un.gt.zero) then
-   !           cc = un*gdt(itr)*udz
-   !           bzx1(i,j) = ux(i,j,1)-cc*(ux(i,j,2)-ux(i,j,1))
-   !           bzy1(i,j) = uy(i,j,1)-cc*(uy(i,j,2)-uy(i,j,1))
-   !           bzz1(i,j) = uz(i,j,1)-cc*(uz(i,j,2)-uz(i,j,1))
-   !           if (iscalar.eq.1) phi(i,j,1,:) = phi(i,j,1,:)-cc*(phi(i,j,2,:)-phi(i,j,1,:))
-   !           if (cc.gt.czmax) czmax = cc
-   !        else
-   !           bzx1(i,j) = ux(i,j,2)
-   !           bzy1(i,j) = uy(i,j,2)
-   !           bzz1(i,j) = uz(i,j,2)
-   !        endif
-   !     enddo
-   !  enddo
-
-    ! zn (+ez)
+    !zn (+ez)
     if (xend(3).eq.nz) then
        do j = 1, xsize(2)
           do i = 1, xsize(1)
@@ -310,57 +335,46 @@ contains
     endif
     call MPI_ALLREDUCE(MPI_IN_PLACE,uznmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uznmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
-    czn = half*(uznmax+uznmin)*gdt(itr)*udz
+   !  czn = half*(uznmax+uznmin)*gdt(itr)*udz
+   !  if (xend(3).eq.nz) then
+   !     bzxn(:,:) = ux(:,:,xsize(3))-czn*(ux(:,:,xsize(3))-ux(:,:,xsize(3)-1))
+   !     bzyn(:,:) = uy(:,:,xsize(3))-czn*(uy(:,:,xsize(3))-uy(:,:,xsize(3)-1))
+   !     bzzn(:,:) = uz(:,:,xsize(3))-czn*(uz(:,:,xsize(3))-uz(:,:,xsize(3)-1))
+   !     if (iscalar.eq.1) phi(:,:,xsize(3),:) = phi(:,:,xsize(3)-1,:)
+   !  endif
     if (xend(3).eq.nz) then
-       bzxn(:,:) = ux(:,:,xsize(3))-czn*(ux(:,:,xsize(3))-ux(:,:,xsize(3)-1))
-       bzyn(:,:) = uy(:,:,xsize(3))-czn*(uy(:,:,xsize(3))-uy(:,:,xsize(3)-1))
-       bzzn(:,:) = uz(:,:,xsize(3))-czn*(uz(:,:,xsize(3))-uz(:,:,xsize(3)-1))
-       if (iscalar.eq.1) phi(:,:,xsize(3),:) = phi(:,:,xsize(3),:)-czn*(phi(:,:,xsize(3),:)-phi(:,:,xsize(3)-1,:))
-      !  if (iscalar.eq.1) phi(:,:,xsize(3),:) = phi(:,:,xsize(3)-1,:)
-    endif
-
-   !  do j = 1, xsize(2)
-   !     do i = 1, xsize(1)
-   !        un = uz(i,j,xsize(3)-1)
-   !        cc = zero
-   !        if (un.gt.zero) then
-   !           cc = un*gdt(itr)*udz
-   !           bzxn(i,j) = ux(i,j,xsize(3))-cc*(ux(i,j,xsize(3))-ux(i,j,xsize(3)-1))
-   !           bzyn(i,j) = uy(i,j,xsize(3))-cc*(uy(i,j,xsize(3))-uy(i,j,xsize(3)-1))
-   !           bzzn(i,j) = uz(i,j,xsize(3))-cc*(uz(i,j,xsize(3))-uz(i,j,xsize(3)-1))
-   !           if (iscalar.eq.1) phi(i,j,xsize(3),:) = phi(i,j,xsize(3),:)-cc*(phi(i,j,xsize(3),:)-phi(i,j,xsize(3)-1,:))
-   !           if (cc.gt.czmax) czmax = cc
-   !        else
-   !           bzxn(i,j) = ux(i,j,xsize(3)-1)
-   !           bzyn(i,j) = uy(i,j,xsize(3)-1)
-   !           bzzn(i,j) = uz(i,j,xsize(3)-1)
-   !           if (iscalar.eq.1) phi(i,j,xsize(3),:) = phi(i,j,xsize(3)-1,:)
-   !        endif
-   !     enddo
-   !  enddo
-
-   !  call MPI_ALLREDUCE(MPI_IN_PLACE,cxmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   !  call MPI_ALLREDUCE(MPI_IN_PLACE,czmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-
-    ! Corner line treatment for scalar
-    if(iscalar.eq.1) then
-       !x1xn, z1
-       if(xstart(3).eq.1) then
-          phi(1,:,1,:) = half*(phi(2,:,1,:)+phi(1,:,2,:))
-          phi(nx,:,1,:) = half*(phi(nx-1,:,1,:)+phi(nx,:,2,:))
-       endif
-       !x1xn, zn
-       if(xend(3).eq.nz) then
-          phi(1,:,xsize(3),:) = half*(phi(2,:,xsize(3),:)+phi(1,:,xsize(3)-1,:))
-          phi(nx,:,xsize(3),:) = half*(phi(nx-1,:,xsize(3),:)+phi(nx,:,xsize(3)-1,:))
-       endif
+       do j = 1, xsize(2)
+          do i = 1, xsize(1)
+             un = uz(i,j,xsize(3)-1)
+             czn = un*gdt(itr)*udz
+             if (un.gt.zero) then
+                bzxn(i,j) = ux(i,j,xsize(3))-czn*(ux(i,j,xsize(3))-ux(i,j,xsize(3)-1))
+                bzyn(i,j) = uy(i,j,xsize(3))-czn*(uy(i,j,xsize(3))-uy(i,j,xsize(3)-1))
+                bzzn(i,j) = uz(i,j,xsize(3))-czn*(uz(i,j,xsize(3))-uz(i,j,xsize(3)-1))
+                if (iscalar.eq.1) then
+                   do is = 1, numscalar
+                      phi(i,j,xsize(3),is) = phi(i,j,xsize(3),is)-czn*(phi(i,j,xsize(3),is)-phi(i,j,xsize(3)-1,is))
+                   enddo
+                endif
+             else
+                bzxn(i,j) = ux(i,j,xsize(3)-1)
+                bzyn(i,j) = uy(i,j,xsize(3)-1)
+                bzzn(i,j) = uz(i,j,xsize(3)-1)
+                if (iscalar.eq.1) then
+                   do is = 1, numscalar
+                      phi(i,j,xsize(3),is) = phi(i,j,xsize(3)-1,is)
+                   enddo
+                endif
+             endif
+          enddo
+       enddo
     endif
 
     if (nrank==0 .and. (mod(itime, ilist)==0 .or. itime==ifirst .or. itime==ilast)) then
-       write(*,*) "Outflow velocity ux1 min max=",real(ux1min,4),real(ux1max,4),real(cx1,4)
-       write(*,*) "Outflow velocity uxn min max=",real(uxnmin,4),real(uxnmax,4),real(cxn,4)
-       write(*,*) "Outflow velocity uz1 min max=",real(uz1min,4),real(uz1max,4),real(cz1,4)
-       write(*,*) "Outflow velocity uzn min max=",real(uznmin,4),real(uznmax,4),real(czn,4)
+       write(*,*) "Outflow velocity ux1 min max=",real(ux1min,4),real(ux1max,4)
+       write(*,*) "Outflow velocity uxn min max=",real(uxnmin,4),real(uxnmax,4)
+       write(*,*) "Outflow velocity uz1 min max=",real(uz1min,4),real(uz1max,4)
+       write(*,*) "Outflow velocity uzn min max=",real(uznmin,4),real(uznmax,4)
     endif
 
     return
@@ -380,6 +394,7 @@ contains
     integer :: i, k
     real(mytype) :: dy0, dy1, a0, a1, a2
 
+    !Dairay et al., Int. J. Heat Fluid Flow (2014) 
     if (xstart(2).eq.1) then
        if (istret.eq.0) then
           dy0 = dy
@@ -417,30 +432,31 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1
 
     integer :: i, j, k
-    real(mytype) :: x, y, z, r, rm, um, beta, lambda
+    real(mytype) :: x, y, z, r, um, lambda
 
-    beta = 0.9_mytype
-    rm = 5._mytype
+    if (ifringe.eq.1) then
+       do k = 1,xsize(3)
+          z = (k+xstart(3)-2)*dz-zlz/two
+          do j = 1,xsize(2)
+             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+             do i = 1,xsize(1)
+                x = (i+xstart(1)-2)*dx-xlx/two
+                r = sqrt(x*x+z*z)
+                if (r.ge.fringe_rm) then
+                   lambda = half*(one+tanh(fringe_beta*(r-fringe_rm)-four))
+                   um = three*(one-four*y*y/yly/yly)/yly/r/sixteen
 
-    do k = 1,xsize(3)
-       z = (k+xstart(3)-2)*dz-zlz/two
-       do j = 1,xsize(2)
-          if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
-          if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
-          do i = 1,xsize(1)
-             x = (i+xstart(1)-2)*dx-xlx/two
-             r = sqrt(x*x+z*z)
-             if (r.ge.rm) then
-                lambda = half*(one+tanh(beta*(r-rm)-four))
-                um = three*(one-four*y*y/yly/yly)/yly/r/sixteen
-
-                dux1(i,j,k,1) = dux1(i,j,k,1)+lambda*(um*x/r-ux1(i,j,k))
-                duy1(i,j,k,1) = duy1(i,j,k,1)+lambda*(zero-uy1(i,j,k))
-                duz1(i,j,k,1) = duz1(i,j,k,1)+lambda*(um*z/r-uz1(i,j,k))
-             endif
+                   dux1(i,j,k,1) = dux1(i,j,k,1) + lambda*(um*x/r-ux1(i,j,k))
+                   duy1(i,j,k,1) = duy1(i,j,k,1) + lambda*(zero-uy1(i,j,k))
+                   duz1(i,j,k,1) = duz1(i,j,k,1) + lambda*(um*z/r-uz1(i,j,k))
+                endif
+             enddo
           enddo
        enddo
-    enddo
+    endif
+
+    return
 
   end subroutine momentum_forcing_impingjet
   !########################################################################
@@ -456,8 +472,9 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1,uy1,uz1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
 
-    integer :: i, j, k, ii, code
+    integer :: i, j, k, is, ii, code
     real(mytype) :: x, y, z, r, um, delta, n, Lseed, eta, sw
+    character(len=20) :: filename
 
     ux1=zero; uy1=zero; uz1=zero
 
@@ -465,7 +482,7 @@ contains
     n = 28._mytype
     Lseed = 2._mytype
     
-    if (iin.ne.0) then
+    if (iin==1 .or. iin==2) then
        call system_clock(count = code)
        if (iin.eq.2) code = 0
        call random_seed(size = ii)
@@ -503,29 +520,49 @@ contains
        enddo
     endif
 
-    !INIT FOR G AND U=MEAN FLOW + NOISE
-    do k = 1, xsize(3)
-       z = (k+xstart(3)-2)*dz-zlz/two
-       do j = 1, xsize(2)
-          if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
-          if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
-          sw = zero
-          if (y.ge.(yly/two-Lseed)) then
-             eta = (y-(yly/two-Lseed))/Lseed
-             sw = half*(one-cos(pi*eta))
-          endif 
-          do i = 1, xsize(1)
-             x = (i+xstart(1)-2)*dx-xlx/two
-             r = sqrt(x*x+z*z)
-             um = (one-erf((r-half)/delta))/two
-             ux1(i,j,k) = ux1(i,j,k)
-             uy1(i,j,k) = uy1(i,j,k) - (n+two)/n*um*sw
-             uz1(i,j,k) = uz1(i,j,k)
+    if(iin.eq.4) then
+      !Read velocity field
+      if (nrank.eq.0) write(*,*) 'reading : ', './data/ux.bin'
+      call decomp_2d_read_one(1,ux1,'data','ux.bin',io_jet,reduce_prec=.false.)
+      if (nrank.eq.0) write(*,*) 'reading : ', './data/uy.bin'
+      call decomp_2d_read_one(1,uy1,'data','uy.bin',io_jet,reduce_prec=.false.)
+      if (nrank.eq.0) write(*,*) 'reading : ', './data/uz.bin'
+      call decomp_2d_read_one(1,uz1,'data','uz.bin',io_jet,reduce_prec=.false.)
+
+      if (iscalar.eq.1) then
+        do is = 1, numscalar
+          phi1(:,:,:,is) = zero
+        enddo
+      endif
+    else
+       !INIT FOR G AND U=MEAN FLOW + NOISE
+       do k = 1, xsize(3)
+          z = (k+xstart(3)-2)*dz-zlz/two
+          do j = 1, xsize(2)
+             if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
+             sw = zero
+             if (y.ge.(yly/two-Lseed)) then
+                eta = (y-(yly/two-Lseed))/Lseed
+                sw = half*(one-cos(pi*eta))
+             endif 
+             do i = 1, xsize(1)
+                x = (i+xstart(1)-2)*dx-xlx/two
+                r = sqrt(x*x+z*z)
+                um = (one-erf((r-half)/delta))/two
+                ux1(i,j,k) = ux1(i,j,k)
+                uy1(i,j,k) = uy1(i,j,k) - (n+two)/n*um*sw
+                uz1(i,j,k) = uz1(i,j,k)
+             enddo
           enddo
        enddo
-    enddo
 
-    if (iscalar.eq.1) phi1 = zero
+       if (iscalar.eq.1) then
+         do is = 1, numscalar
+            phi1(:,:,:,is) = zero
+         enddo
+       endif
+    endif
     
 #ifdef DEBG
     if (nrank .eq. 0) write(*,*) '# init end ok'
@@ -579,8 +616,8 @@ contains
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3)) :: ep1
     integer, intent(in) :: num
 
-    integer :: i, k
-    real(mytype) :: dy0, dy1
+    integer :: i, k, ierr
+    real(mytype) :: dy0, dy1, numax01, numax02
     real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: nu01, nu02
 
     ! Write vorticity as an example of post processing
@@ -638,28 +675,40 @@ contains
     call write_field(di1, ".", "critq", num, flush = .true.) ! Reusing temporary array, force flush
 
     !Nusselt number
+    numax01 = -1609._mytype; numax02 = -1609._mytype;
     if (iscalar.eq.1) then
        nu01 = zero; nu02 = zero
        if (xstart(2).eq.1) then
           do k = 1, xsize(3)
              do i = 1, xsize(1)
                 if (abs(phi1(i,1,k,1)).gt.1.0e-12_mytype) nu01(i,1,k) = one/phi1(i,1,k,1)
+                if (nu01(i,1,k).gt.numax01) numax01 = nu01(i,1,k)
+
                 if (numscalar.ge.2) then
                    if (istret.eq.0) then
                       dy0 = dy
-                      nu02(i,xstart(2),k) = -(-eleven*phi1(i,1,k,2)+eighteen*phi1(i,2,k,2)-nine*phi1(i,3,k,2)+two*phi1(i,4,k,2))/six/dy0
+                      nu02(i,1,k) = -(-eleven*phi1(i,1,k,2)+eighteen*phi1(i,2,k,2)-nine*phi1(i,3,k,2)+two*phi1(i,4,k,2))/six/dy0
                    else
                       dy0 = yp(xstart(2)+1)-yp(xstart(2))
                       dy1 = yp(xstart(2)+2)-yp(xstart(2)+1)
-                      nu02(i,xstart(2),k) = -(-phi1(i,1,k,2)*(two*dy0+dy1)/dy0/(dy0+dy1) &
+                      nu02(i,1,k) = -(-phi1(i,1,k,2)*(two*dy0+dy1)/dy0/(dy0+dy1) &
                                     + phi1(i,2,k,2)*(dy0+dy1)/dy0/dy1 - phi1(i,3,k,2)*dy0/dy1/(dy0+dy1))
                    endif
+                   if (nu02(i,1,k).gt.numax02) numax02 = nu02(i,1,k)
                 endif
              enddo
           enddo
        endif
+       
        call write_field(nu01, ".", "nu01", num)
-       if (numscalar.ge.2) call write_field(nu02, ".", "nu02", num)
+       call MPI_ALLREDUCE(MPI_IN_PLACE,numax01,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+       if (nrank==0) write(*,*) "Nusselt number nu01 max=", real(numax01,4)
+
+       if (numscalar.ge.2) then
+          call write_field(nu02, ".", "nu02", num)
+          call MPI_ALLREDUCE(MPI_IN_PLACE,numax02,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+          if (nrank==0) write(*,*) "Nusselt number nu02 max=", real(numax02,4)
+       endif
     endif
 
   end subroutine visu_impingjet
