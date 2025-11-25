@@ -21,10 +21,11 @@ add_executable(xcompact3d
                     Case-Cylinder-wake.f90
                     Case-Generic.f90
                     Case-Gravity-current.f90
-                    Case-Imping-Jet.f90
+                    Case-Impinging-Jet.f90
                     Case-Mixing-layer.f90
                     Case-Periodic-hill.f90
                     Case-Pipe-flow.f90
+                    Case-Plane-Impinging.f90
                     Case-Plane-Jet.f90
                     Case-PTBL.f90
                     Case-Sandbox.f90

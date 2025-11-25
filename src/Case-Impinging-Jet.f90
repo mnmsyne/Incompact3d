@@ -2,7 +2,7 @@
 !This file is part of Xcompact3d (xcompact3d.com)
 !SPDX-License-Identifier: BSD 3-Clause
 
-module impingjet
+module impingingjet
 
   USE decomp_2d_constants
   USE decomp_2d_mpi
@@ -15,8 +15,8 @@ module impingjet
   character(len=*), parameter :: io_jet = "io-jet"
 
   PRIVATE !! All functions/subroutines private by default
-  PUBLIC :: boundary_conditions_impingjet, momentum_forcing_impingjet, init_impingjet, &
-            postprocess_impingjet, visu_impingjet, visu_impingjet_init
+  PUBLIC :: boundary_conditions_impingingjet, momentum_forcing_impingingjet, init_impingingjet, &
+            postprocess_impingingjet, visu_impingingjet, visu_impingingjet_init
 
   ! T. Dairay, V. Fortuné, E. Lamballais, and L.-E. Brizzi, 
   ! Direct numerical simulation of a turbulent jet impinging on a heated wall, 
@@ -24,7 +24,7 @@ module impingjet
 
 contains
 
-  subroutine boundary_conditions_impingjet (ux, uy, uz, phi)
+  subroutine boundary_conditions_impingingjet (ux, uy, uz, phi)
     USE param
     USE variables
 
@@ -64,7 +64,7 @@ contains
     endif
 
     return
-  end subroutine boundary_conditions_impingjet
+  end subroutine boundary_conditions_impingingjet
   !########################################################################
 
   subroutine inflow (ux, uy, uz)
@@ -422,7 +422,7 @@ contains
   end subroutine scalar_neumann
   !########################################################################
 
-  subroutine momentum_forcing_impingjet(dux1,duy1,duz1,ux1,uy1,uz1)
+  subroutine momentum_forcing_impingingjet(dux1,duy1,duz1,ux1,uy1,uz1)
     USE param
     USE variables
 
@@ -434,7 +434,7 @@ contains
     integer :: i, j, k
     real(mytype) :: x, y, z, r, um, lambda
 
-    if (ifringe.eq.1) then
+    if (ifringe.ne.0) then
        do k = 1,xsize(3)
           z = (k+xstart(3)-2)*dz-zlz/two
           do j = 1,xsize(2)
@@ -446,9 +446,11 @@ contains
                 if (r.ge.fringe_rm) then
                    lambda = half*(one+tanh(fringe_beta*(r-fringe_rm)-four))
                    um = three*(one-four*y*y/yly/yly)/yly/r/sixteen
-
+                   if (ifringe.ne.2) then
+                      duy1(i,j,k,1) = duy1(i,j,k,1) + lambda*(zero-uy1(i,j,k))
+                   endif
+                   !ifringe=2 means only damp u and w
                    dux1(i,j,k,1) = dux1(i,j,k,1) + lambda*(um*x/r-ux1(i,j,k))
-                   duy1(i,j,k,1) = duy1(i,j,k,1) + lambda*(zero-uy1(i,j,k))
                    duz1(i,j,k,1) = duz1(i,j,k,1) + lambda*(um*z/r-uz1(i,j,k))
                 endif
              enddo
@@ -458,10 +460,10 @@ contains
 
     return
 
-  end subroutine momentum_forcing_impingjet
+  end subroutine momentum_forcing_impingingjet
   !########################################################################
 
-  subroutine init_impingjet (ux1,uy1,uz1,phi1)
+  subroutine init_impingingjet (ux1,uy1,uz1,phi1)
     USE decomp_2d_io
     USE variables
     USE param
@@ -569,10 +571,10 @@ contains
 #endif
 
     return
-  end subroutine init_impingjet
+  end subroutine init_impingingjet
   !########################################################################
 
-  subroutine postprocess_impingjet (ux1,uy1,uz1,pp3,phi1,ep1)
+  subroutine postprocess_impingingjet (ux1,uy1,uz1,pp3,phi1,ep1)
     use var, ONLY : nzmsize
     implicit none
 
@@ -580,9 +582,9 @@ contains
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
     real(mytype), intent(in), dimension(ph1%zst(1):ph1%zen(1),ph1%zst(2):ph1%zen(2),nzmsize,npress) :: pp3
 
-  end subroutine postprocess_impingjet
+  end subroutine postprocess_impingingjet
 
-  subroutine visu_impingjet_init (visu_initialised)
+  subroutine visu_impingingjet_init (visu_initialised)
 
     use decomp_2d_io, only : decomp_2d_register_variable
     use visu, only : io_name, output2D
@@ -596,10 +598,10 @@ contains
 
     visu_initialised = .true.
     
-  end subroutine visu_impingjet_init
+  end subroutine visu_impingingjet_init
   !########################################################################
 
-  subroutine visu_impingjet (ux1, uy1, uz1, pp3, phi1, ep1, num)
+  subroutine visu_impingingjet (ux1, uy1, uz1, pp3, phi1, ep1, num)
     use var, only : ux2, uy2, uz2, ux3, uy3, uz3
     USE var, only : ta1,tb1,tc1,td1,te1,tf1,tg1,th1,ti1,di1
     USE var, only : ta2,tb2,tc2,td2,te2,tf2,di2
@@ -711,7 +713,7 @@ contains
        endif
     endif
 
-  end subroutine visu_impingjet
+  end subroutine visu_impingingjet
   !########################################################################
 
-end module impingjet
+end module impingingjet

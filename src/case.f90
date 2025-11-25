@@ -19,7 +19,8 @@ module case
   use planejet
   use walljet
   use swirljet
-  use impingjet
+  use impingingjet
+  use planeimpinging
   use tbl
   use abl
   use uniform
@@ -108,9 +109,13 @@ contains
 
        call init_swirljet (ux1, uy1, uz1, phi1)
 
-    elseif (itype.eq.itype_impingjet) then
+    elseif (itype.eq.itype_impingingjet) then
 
-       call init_impingjet (ux1, uy1, uz1, phi1)
+       call init_impingingjet (ux1, uy1, uz1, phi1)
+
+    elseif (itype.eq.itype_planeimpinging) then
+
+       call init_planeimpinging (ux1, uy1, uz1, phi1)
 
     elseif (itype.eq.itype_tbl) then
 
@@ -233,9 +238,13 @@ contains
 
        call boundary_conditions_swirljet (ux, uy, uz, phi)
 
-    elseif (itype.eq.itype_impingjet) then
+    elseif (itype.eq.itype_impingingjet) then
 
-       call boundary_conditions_impingjet (ux, uy, uz, phi)
+       call boundary_conditions_impingingjet (ux, uy, uz, phi)
+
+    elseif (itype.eq.itype_planeimpinging) then
+
+       call boundary_conditions_planeimpinging (ux, uy, uz, phi)
 
     elseif (itype.eq.itype_tbl) then
 
@@ -421,27 +430,31 @@ contains
 
     elseif (itype.eq.itype_cavity) then
 
-       call postprocess_cavity(ux, uy, uz, phi)
+       call postprocess_cavity (ux, uy, uz, phi)
 
     elseif (itype.eq.itype_pipe) then
 
-       call postprocess_pipe(ux, uy, uz, pp, phi, ep)
+       call postprocess_pipe (ux, uy, uz, pp, phi, ep)
        
     elseif (itype.eq.itype_tempjet) then
 
-       call postprocess_tempjet(ux, uy, uz, pp, phi, ep)
+       call postprocess_tempjet (ux, uy, uz, pp, phi, ep)
 
     elseif (itype.eq.itype_planejet) then
 
-       call postprocess_planejet(ux, uy, uz, pp, phi, ep)
+       call postprocess_planejet (ux, uy, uz, pp, phi, ep)
        
     elseif (itype.eq.itype_swirljet) then
 
-       call postprocess_swirljet(ux, uy, uz, pp, phi, ep)
+       call postprocess_swirljet (ux, uy, uz, pp, phi, ep)
 
-    elseif (itype.eq.itype_impingjet) then
+    elseif (itype.eq.itype_impingingjet) then
 
-       call postprocess_impingjet(ux, uy, uz, pp, phi, ep)
+       call postprocess_impingingjet (ux, uy, uz, pp, phi, ep)
+
+    elseif (itype.eq.itype_planeimpinging) then
+
+       call postprocess_planeimpinging (ux, uy, uz, pp, phi, ep)
 
     elseif (itype.eq.itype_ptbl) then
       
@@ -506,9 +519,13 @@ contains
 
        call visu_swirljet_init(case_visu_init)  
 
-    else if (itype .eq. itype_impingjet) then
+    else if (itype .eq. itype_impingingjet) then
 
-       call visu_impingjet_init(case_visu_init)  
+       call visu_impingingjet_init(case_visu_init)  
+
+    else if (itype .eq. itype_planeimpinging) then
+
+       call visu_planeimpinging_init(case_visu_init)
 
     else if (itype .eq. itype_uniform) then
 
@@ -598,9 +615,14 @@ contains
        call visu_swirljet(ux1, uy1, uz1, pp3, phi1, ep1, num)
        called_visu = .true.       
 
-    elseif (itype.eq.itype_impingjet) then
+    elseif (itype.eq.itype_impingingjet) then
 
-       call visu_impingjet(ux1, uy1, uz1, pp3, phi1, ep1, num)
+       call visu_impingingjet(ux1, uy1, uz1, pp3, phi1, ep1, num)
+       called_visu = .true. 
+
+    elseif (itype.eq.itype_planeimpinging) then
+
+       call visu_planeimpinging(ux1, uy1, uz1, pp3, phi1, ep1, num)
        called_visu = .true. 
 
     elseif (itype.eq.itype_tbl) then
@@ -668,9 +690,13 @@ contains
 
        call momentum_forcing_ptbl(dux1, duy1, duz1, ux1, uy1, uz1, phi1)
 
-    elseif (itype.eq.itype_impingjet) then
+    elseif (itype.eq.itype_impingingjet) then
 
-       call momentum_forcing_impingjet(dux1, duy1, duz1, ux1, uy1, uz1)
+       call momentum_forcing_impingingjet(dux1, duy1, duz1, ux1, uy1, uz1)
+
+    elseif (itype.eq.itype_planeimpinging) then
+
+       call momentum_forcing_planeimpinging(dux1, duy1, duz1, ux1, uy1, uz1)
 
     elseif (itype.eq.itype_walljet) then
 

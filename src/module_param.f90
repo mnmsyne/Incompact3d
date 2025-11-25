@@ -308,7 +308,8 @@ module param
        itype_planejet = 72, &
        itype_walljet = 721, &
        itype_swirljet = 73, &
-       itype_impingjet = 74, &
+       itype_impingingjet = 74, &
+       itype_planeimpinging = 741, &
        itype_tbl = 9, &
        itype_abl = 10, &
        itype_uniform = 11, &
@@ -319,7 +320,7 @@ module param
 
   integer :: cont_phi,itr,itime,itest,iprocessing
   integer :: ifft,istret,iforc_entree,iturb
-  integer :: iin,itimescheme,iimplicit,ifirst,ilast,iles
+  integer :: iin,itimescheme,iimplicit,ifirst,ilast,iles,iopen
   integer :: ntime ! How many (sub)timestpeps do we need to store?
   integer :: icheckpoint,irestart,idebmod,ioutput,imodulo2,idemarre,icommence,irecord
   integer :: ioutflow, ninflows, ntimesteps

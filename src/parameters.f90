@@ -42,7 +42,7 @@ subroutine parameter(input_i3d)
   integer :: longueur ,impi,j, is, total, ierr
 
   NAMELIST /BasicParam/ p_row, p_col, nx, ny, nz, istret, beta, xlx, yly, zlz, &
-       itype, iin, re, u1, u2, init_noise, inflow_noise, &
+       itype, iin, re, u1, u2, init_noise, inflow_noise, iopen, &
        dt, ifirst, ilast, &
        numscalar, iibm, ilmn, &
        ilesmod, iscalar, &
@@ -252,7 +252,7 @@ subroutine parameter(input_i3d)
      read(10, nml=ProbeSpectra); rewind(10)
   end if
   
-  if (itype.eq.itype_impingjet) then
+  if (itype==itype_impingingjet .or. itype==itype_planeimpinging) then
      read(10, nml=FringeMethod); rewind(10)
   endif
 
@@ -396,15 +396,17 @@ subroutine parameter(input_i3d)
      elseif (itype.eq.itype_mixlayer) then
         print *,'Mixing layer'
      elseif (itype.eq.itype_tempjet) then
-        print *,'Temporal plane jet'
+        print *,'Temporal (plane) jet'
      elseif (itype.eq.itype_planejet) then
         print *,'Plane jet'
      elseif (itype.eq.itype_walljet) then
-        print *,'Wall jet' 
+        print *,'(Plane) Wall jet' 
      elseif (itype.eq.itype_swirljet) then
         print *,'Swirling jet'
-     elseif (itype.eq.itype_impingjet) then
-        print *,'Impinging jet'
+     elseif (itype.eq.itype_impingingjet) then
+        print *,'(Circular) Impinging jet'
+     elseif (itype.eq.itype_planeimpinging) then
+        print *,'Plane impinging jet'
      elseif (itype.eq.itype_tbl) then
         print *,'Turbulent boundary layer'
      elseif (itype.eq.itype_abl) then
@@ -742,6 +744,7 @@ subroutine parameter_defaults()
   init_noise = zero
   inflow_noise = zero
   iin = 0
+  iopen = 0
   itimescheme = 4
   iimplicit = 0
   istret = 0
