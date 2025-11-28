@@ -12,6 +12,8 @@ module planeimpinging
 
   IMPLICIT NONE
 
+  character(len=*), parameter :: io_jet = "io-jet"
+
   PRIVATE !! All functions/subroutines private by default
   PUBLIC :: boundary_conditions_planeimpinging, momentum_forcing_planeimpinging, init_planeimpinging, &
             postprocess_planeimpinging, visu_planeimpinging, visu_planeimpinging_init
@@ -82,7 +84,7 @@ contains
           r = sqrt(x*x)
           if (r.le.half) then
              byxn(i,k) = zero
-             byyn(i,k) = -(n+one)/n*(one-(two*r)**n)
+             byyn(i,k) = -(n+one)/n*(one-(two*r)**n)*(one-exp(-half*t*t))
              byzn(i,k) = zero
           else
              byxn(i,k) = zero
@@ -93,7 +95,6 @@ contains
     enddo
 
     return
-
   end subroutine inflow
   !########################################################################
 
@@ -129,15 +130,15 @@ contains
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1max,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1min,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1mean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    cx1 = -ux1mean*gdt(itr)*udx
+    ux1mean = ux1mean/nproc
     if (iopen.eq.0) then
-       !convective outflow
+       !convective outflow using parabolic profile
        do k = 1, xsize(3)
           do j = 1, xsize(2)
-            !  if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
-            !  if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
-            !  un = -three/four*(one-four*y*y/yly/yly)/yly
-            !  cx1 = un*gdt(itr)*udx
+             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+             un = -three/four*(one-four*y*y/yly/yly)/yly
+             cx1 = un*gdt(itr)*udx
              bxx1(j,k) = ux(1,j,k)-cx1*(ux(2,j,k)-ux(1,j,k))
              bxy1(j,k) = uy(1,j,k)-cx1*(uy(2,j,k)-uy(1,j,k))
              bxz1(j,k) = uz(1,j,k)-cx1*(uz(2,j,k)-uz(1,j,k))
@@ -147,7 +148,7 @@ contains
           enddo
        enddo
     elseif (iopen.eq.1) then
-       !zero-gradient + reverse flow
+       !open boundary: zero-gradient + reverse flow (inflow velocity set to 0)
        do k = 1, xsize(3)
           do j = 1, xsize(2)
              un = -ux(2,j,k)
@@ -182,15 +183,15 @@ contains
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    cxn = uxnmean*gdt(itr)*udx
+    uxnmean = uxnmean/nproc
     if (iopen.eq.0) then
-       !convective outflow
+       !convective outflow using parabolic profile
        do k = 1, xsize(3)
           do j = 1, xsize(2)
-            !  if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
-            !  if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
-            !  un = three/four*(one-four*y*y/yly/yly)/yly
-            !  cxn = un*gdt(itr)*udx
+             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+             un = three/four*(one-four*y*y/yly/yly)/yly
+             cxn = un*gdt(itr)*udx
              bxxn(j,k) = ux(nx,j,k)-cxn*(ux(nx,j,k)-ux(nx-1,j,k))
              bxyn(j,k) = uy(nx,j,k)-cxn*(uy(nx,j,k)-uy(nx-1,j,k))
              bxzn(j,k) = uz(nx,j,k)-cxn*(uz(nx,j,k)-uz(nx-1,j,k))
@@ -200,7 +201,7 @@ contains
           enddo
        enddo
     elseif (iopen.eq.1) then
-       !zero-gradient + reverse flow
+       !open boundary: zero-gradient + reverse flow (inflow velocity set to 0)
        do k = 1, xsize(3)
           do j = 1, xsize(2)
              un = ux(nx-1,j,k)
@@ -224,6 +225,11 @@ contains
     endif
 
     if (nrank==0 .and. (mod(itime, ilist)==0 .or. itime==ifirst .or. itime==ilast)) then
+       if (iopen.eq.0) then
+          write(*,*) "Convective outflow BCs at x1 and xn: using parabolic profile"
+       elseif (iopen.eq.1) then
+          write(*,*) "Open boundary BCs at x1 and xn: zero-gradient + reverse flow"
+       endif
        write(*,*) "Outflow velocity ux1 min max mean=",real(ux1min,4),real(ux1max,4),real(ux1mean,4)
        write(*,*) "Outflow velocity uxn min max mean=",real(uxnmin,4),real(uxnmax,4),real(uxnmean,4)
     endif
@@ -255,6 +261,7 @@ contains
                 phi(i,1,k,is) = (eighteen*phi(i,2,k,is)-nine*phi(i,3,k,is)+two*phi(i,4,k,is)+six*dy0*qflux)/eleven
              enddo
           enddo
+          if (nrank .eq. 0) write(*,*) 'Neumann BC for scalar (third-order uniform grid)'
        else
           dy0 = yp(xstart(2)+1)-yp(xstart(2))
           dy1 = yp(xstart(2)+2)-yp(xstart(2)+1)
@@ -267,6 +274,7 @@ contains
                 phi(i,1,k,is) = -(qflux+a1*phi(i,2,k,is)+a2*phi(i,3,k,is))/a0
              enddo
           enddo
+          if (nrank .eq. 0) write(*,*) 'Neumann BC for scalar (second-order stretched grid)'
        endif
     endif
 
@@ -308,10 +316,10 @@ contains
              enddo
           enddo
        enddo
+       if (nrank .eq. 0) write(*,*) '# fringe forcing applied at rm=', fringe_rm
     endif
 
     return
-
   end subroutine momentum_forcing_planeimpinging
   !########################################################################
 
@@ -326,65 +334,19 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1,uy1,uz1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
 
-    integer :: i, j, k, is, ii, code
-    real(mytype) :: x, y, r, um, delta, n, sw
+    integer :: is
 
     ux1=zero; uy1=zero; uz1=zero
 
-    delta = 0.05_mytype
-    n = 28._mytype
-    
-    if (iin==1 .or. iin==2) then
-       call system_clock(count = code)
-       if (iin.eq.2) code = 0
-       call random_seed(size = ii)
-       call random_seed(put = code+63946*(nrank+1)*(/ (i - 1, i = 1, ii) /))
-
-       call random_number(ux1)
-       call random_number(uy1)
-       call random_number(uz1)
-
-       do k = 1, xsize(3)
-          do j = 1, xsize(2)
-             do i = 1, xsize(1)
-                ux1(i,j,k) = init_noise*(ux1(i,j,k)-half)
-                uy1(i,j,k) = init_noise*(uy1(i,j,k)-half)
-                uz1(i,j,k) = init_noise*(uz1(i,j,k)-half)
-             enddo
-          enddo
-       enddo
-
-       !modulation of the random noise
-       do k = 1, xsize(3)
-          do j = 1, xsize(2)
-             do i = 1, xsize(1)
-                x = (i+xstart(1)-2)*dx-xlx/two
-                r = sqrt(x*x)
-                um = (one-erf((r-half)/delta))/two
-                ux1(i,j,k) = um*ux1(i,j,k)
-                uy1(i,j,k) = um*uy1(i,j,k)
-                uz1(i,j,k) = um*uz1(i,j,k)
-             enddo
-          enddo
-       enddo
+    if(iin.eq.4) then
+      !Read velocity field
+      if (nrank.eq.0) write(*,*) 'reading : ', './data/ux.bin'
+      call decomp_2d_read_one(1,ux1,'data','ux.bin',io_jet,reduce_prec=.false.)
+      if (nrank.eq.0) write(*,*) 'reading : ', './data/uy.bin'
+      call decomp_2d_read_one(1,uy1,'data','uy.bin',io_jet,reduce_prec=.false.)
+      if (nrank.eq.0) write(*,*) 'reading : ', './data/uz.bin'
+      call decomp_2d_read_one(1,uz1,'data','uz.bin',io_jet,reduce_prec=.false.)
     endif
-
-    !INIT FOR G AND U=MEAN FLOW + NOISE
-    do k = 1, xsize(3)
-       do j = 1, xsize(2)
-          if (istret.eq.0) y = (j+xstart(2)-2)*dy
-          if (istret.ne.0) y = yp(j+xstart(2)-1)
-          sw = half*(one-cos(pi*y/yly))
-          do i = 1, xsize(1)
-             x = (i+xstart(1)-2)*dx-xlx/two
-             r = sqrt(x*x)
-             um = (one-erf((r-half)/delta))/two
-             ux1(i,j,k) = ux1(i,j,k)
-             uy1(i,j,k) = uy1(i,j,k) - (n+one)/n*um*sw
-             uz1(i,j,k) = uz1(i,j,k)
-          enddo
-       enddo
-    enddo
 
     if (iscalar.eq.1) then
        do is = 1, numscalar
@@ -392,9 +354,7 @@ contains
        enddo
     endif
 
-#ifdef DEBG
     if (nrank .eq. 0) write(*,*) '# init end ok'
-#endif
 
     return
   end subroutine init_planeimpinging
@@ -433,7 +393,7 @@ contains
     USE var, only : ta2,tb2,tc2,td2,te2,tf2,di2
     USE var, only : ta3,tb3,tc3,td3,te3,tf3,di3
     use var, ONLY : nxmsize, nymsize, nzmsize
-    use visu, only : write_field
+    use visu, only : write_field, write_xdmf_vector
     use ibm_param, only : ubcx,ubcy,ubcz
 
     implicit none
@@ -489,10 +449,19 @@ contains
     
     !VORTICITY FIELD
     di1 = zero
-    di1(:,:,:)=sqrt(  (tf1(:,:,:)-th1(:,:,:))**2 &
-                    + (tg1(:,:,:)-tc1(:,:,:))**2 &
-                    + (tb1(:,:,:)-td1(:,:,:))**2)
-    call write_field(di1, ".", "vort", num, flush = .true.) ! Reusing temporary array, force flush
+    di1(:,:,:) = tf1(:,:,:)-th1(:,:,:)
+    call write_field(di1, ".", "vorx", num, flush = .true.)
+    di1 = zero
+    di1(:,:,:) = tg1(:,:,:)-tc1(:,:,:)
+    call write_field(di1, ".", "vory", num, flush = .true.)
+    di1 = zero
+    di1(:,:,:) = tb1(:,:,:)-td1(:,:,:)
+    call write_field(di1, ".", "vorz", num, flush = .true.)
+    call write_xdmf_vector(".", "Vort", "vorx", "vory", "vorz", num)
+   !  di1(:,:,:)=sqrt(  (tf1(:,:,:)-th1(:,:,:))**2 &
+   !                  + (tg1(:,:,:)-tc1(:,:,:))**2 &
+   !                  + (tb1(:,:,:)-td1(:,:,:))**2)
+   !  call write_field(di1, ".", "vort", num, flush = .true.) ! Reusing temporary array, force flush
 
     !Q=-0.5*(ta1**2+te1**2+ti1**2)-td1*tb1-tg1*tc1-th1*tf1
     di1 = zero

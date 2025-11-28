@@ -28,7 +28,7 @@ module visu
 
   private
   public :: output2D, visu_init, visu_ready, visu_finalise, write_snapshot, end_snapshot, &
-       write_field, io_name
+       write_field, io_name, write_xdmf_vector
 
 contains
 
@@ -239,7 +239,7 @@ contains
     call write_field(uy1, ".", "uy", num)
     call write_field(uz1, ".", "uz", num)
     
-    call write_xdmf_vector(".", num)
+    call write_xdmf_vector(".", "U", "ux", "uy", "uz", num)
 
     ! Interpolate pressure
     !WORK Z-PENCILS
@@ -587,13 +587,13 @@ contains
   end subroutine write_field
 
   
-  subroutine write_xdmf_vector(pathname, num)
+  subroutine write_xdmf_vector(pathname, vectorname, dataname1, dataname2, dataname3, num)
 
     use utilities, only : gen_filename,gen_h5path
     
     implicit none
     
-    character(len=*), intent(in) :: pathname
+    character(len=*), intent(in) :: pathname, vectorname, dataname1, dataname2, dataname3
     integer, intent(in) :: num
     integer :: precision
     character(len=:), allocatable :: fmt
@@ -602,26 +602,26 @@ contains
     precision = 8
     
     if (nrank.eq.0) then
-      write(ioxdmf,*)'        <Attribute Name="U" AttributeType="Vector" Center="Node" >'
+      write(ioxdmf,*)'        <Attribute Name="'//trim(vectorname)//'" AttributeType="Vector" Center="Node" >'
       write(ioxdmf,*)'            <DataItem ItemType="Function" Function="JOIN($0, $1, $2)"'
       write(ioxdmf,fmt)'                Dimensions="',zszV(3)," ",yszV(2)," ",xszV(1),' 3">'
       
       write(ioxdmf,*)'                <DataItem Format="Binary"'
       write(ioxdmf,"(A,I0,A)")'                DataType="Float" Precision="', precision, '" Endian="little" Seek="0"'
       write(ioxdmf,fmt)'                Dimensions="',zszV(3)," ",yszV(2)," ",xszV(1),'">'
-      write(ioxdmf,*)'                    '//gen_h5path(gen_filename(pathname, 'ux', num, 'bin'), num)
+      write(ioxdmf,*)'                    '//gen_h5path(gen_filename(pathname, dataname1, num, 'bin'), num)
       write(ioxdmf,*)'                </DataItem>'
 
       write(ioxdmf,*)'                <DataItem Format="Binary"'
       write(ioxdmf,"(A,I0,A)")'                DataType="Float" Precision="', precision, '" Endian="little" Seek="0"'
       write(ioxdmf,fmt)'                Dimensions="',zszV(3)," ",yszV(2)," ",xszV(1),'">'
-      write(ioxdmf,*)'                    '//gen_h5path(gen_filename(pathname, 'uy', num, 'bin'), num)
+      write(ioxdmf,*)'                    '//gen_h5path(gen_filename(pathname, dataname2, num, 'bin'), num)
       write(ioxdmf,*)'                </DataItem>'
 
       write(ioxdmf,*)'                <DataItem Format="Binary"'
       write(ioxdmf,"(A,I0,A)")'                DataType="Float" Precision="', precision, '" Endian="little" Seek="0"'
       write(ioxdmf,fmt)'                Dimensions="',zszV(3)," ",yszV(2)," ",xszV(1),'">'
-      write(ioxdmf,*)'                    '//gen_h5path(gen_filename(pathname, 'uz', num, 'bin'), num)
+      write(ioxdmf,*)'                    '//gen_h5path(gen_filename(pathname, dataname3, num, 'bin'), num)
       write(ioxdmf,*)'                </DataItem>'
       
       write(ioxdmf,*)'            </DataItem>'

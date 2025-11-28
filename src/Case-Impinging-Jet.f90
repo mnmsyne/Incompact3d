@@ -115,7 +115,7 @@ contains
     endif
 
     if (iin.ne.0) then
-      ! synthetic perturbation
+      write(*,*) "# inflow using synthetic perturbation: A*cos(m*theta+phi)"
       do m = 1, NMODE
          call randn_gauss(xi)
          Amx(m) = rhoA*Amx(m)+sqrt(one-rhoA*rhoA)*sigmaA*xi
@@ -139,7 +139,7 @@ contains
           theta = atan2(z,x)
 
           uxprime = zero; uyprime = zero; uzprime = zero
-          if (iin.ne.2) then
+          if (iin.eq.1) then
             do m = 1, NMODE
                uxprime = uxprime + Amx(m)*cos(m*theta+phx(m))
                uyprime = uyprime + Amy(m)*cos(m*theta+phy(m))
@@ -188,95 +188,129 @@ contains
     integer :: i, j, k, is, ierr
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-    real(mytype) :: udx, udz, un, cx1, cxn, cz1, czn
-    real(mytype) :: ux1min, ux1max, uxnmin, uxnmax, uz1min, uz1max, uznmin, uznmax
+    real(mytype) :: udx, udy, udz, uddx, uddy, uddz
+    real(mytype) :: x, y, z, r, un, cx1, cxn, cz1, czn
+    real(mytype) :: ux1min, ux1max, ux1mean, uxnmin, uxnmax, uxnmean
+    real(mytype) :: uz1min, uz1max, uz1mean, uznmin, uznmax, uznmean
 
-    udx = one/dx; udz = one/dz; 
+    udx=one/dx; udy=one/dy; udz=one/dz; uddx=half/dx; uddy=half/dy; uddz=half/dz
 
-    ux1max = -1609._mytype; ux1min = 1609._mytype;
-    uxnmax = -1609._mytype; uxnmin = 1609._mytype;
-    uz1max = -1609._mytype; uz1min = 1609._mytype;
-    uznmax = -1609._mytype; uznmin = 1609._mytype;
+    ux1max = -1609._mytype; ux1min = 1609._mytype; ux1mean = zero
+    uxnmax = -1609._mytype; uxnmin = 1609._mytype; uxnmean = zero
+    uz1max = -1609._mytype; uz1min = 1609._mytype; uz1mean = zero
+    uznmax = -1609._mytype; uznmin = 1609._mytype; uznmean = zero
 
     !x1 (-ex)
     do k = 1, xsize(3)
        do j = 1, xsize(2)
           if (ux(2,j,k).gt.ux1max) ux1max = ux(2,j,k)
           if (ux(2,j,k).lt.ux1min) ux1min = ux(2,j,k)
+          ux1mean = ux1mean + ux(2,j,k)
        enddo
     enddo
+    ux1mean = ux1mean/xsize(2)/xsize(3)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1max,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1min,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
-   !  cx1 = half*(ux1max+ux1min)*gdt(itr)*udx
-   !  bxx1(:,:) = ux(1,:,:)-cx1*(ux(2,:,:)-ux(1,:,:))
-   !  bxy1(:,:) = uy(1,:,:)-cx1*(uy(2,:,:)-uy(1,:,:))
-   !  bxz1(:,:) = uz(1,:,:)-cx1*(uz(2,:,:)-uz(1,:,:))
-   !  if (iscalar.eq.1) phi(1,:,:,:) = phi(2,:,:,:)
-    do k = 1, xsize(3)
-       do j = 1, xsize(2)
-          un = -ux(2,j,k)
-          cx1 = un*gdt(itr)*udx
-          if (un.gt.zero) then
+    call MPI_ALLREDUCE(MPI_IN_PLACE,ux1mean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
+    ux1mean = ux1mean/nproc
+    if (iopen.eq.0) then
+       !convective outflow using parabolic profile
+       do k = 1, xsize(3)
+          z = (k+xstart(3)-2)*dz-zlz/two
+          do j = 1, xsize(2)
+             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+             x = -xlx/two
+             r = sqrt(x*x+z*z)
+             un = three*(one-four*y*y/yly/yly)/yly/r/sixteen*x/r
+             cx1 = un*gdt(itr)*udx
              bxx1(j,k) = ux(1,j,k)-cx1*(ux(2,j,k)-ux(1,j,k))
              bxy1(j,k) = uy(1,j,k)-cx1*(uy(2,j,k)-uy(1,j,k))
              bxz1(j,k) = uz(1,j,k)-cx1*(uz(2,j,k)-uz(1,j,k))
              if (iscalar.eq.1) then
-                do is = 1, numscalar
-                   phi(1,j,k,is) = phi(1,j,k,is)-cx1*(phi(2,j,k,is)-phi(1,j,k,is))
-                enddo
+                phi(1,j,k,:) = phi(1,j,k,:)-cx1*(phi(2,j,k,:)-phi(1,j,k,:))
              endif
-          else
-             bxx1(j,k) = ux(2,j,k)
-             bxy1(j,k) = uy(2,j,k)
-             bxz1(j,k) = uz(2,j,k)
-             if (iscalar.eq.1) then
-                do is = 1, numscalar
-                   phi(1,j,k,is) = phi(2,j,k,is)
-                enddo
-             endif
-          endif
+          enddo
        enddo
-    enddo
+    elseif (iopen.eq.1) then
+       !open boundary: zero-gradient + reverse flow (inflow velocity set to 0)
+       do k = 1, xsize(3)
+          do j = 1, xsize(2)
+             un = -ux(2,j,k)
+             if (un.ge.zero) then
+                bxx1(j,k) = ux(2,j,k)
+                bxy1(j,k) = uy(2,j,k)
+                bxz1(j,k) = uz(2,j,k)
+                if (iscalar.eq.1) then
+                   phi(1,j,k,:) = phi(2,j,k,:)
+                endif
+             else
+                bxx1(j,k) = zero
+                bxy1(j,k) = zero
+                bxz1(j,k) = zero
+                if (iscalar.eq.1) then
+                   phi(1,j,k,:) = zero
+                endif
+             endif
+          enddo
+       enddo
+    endif
 
     !xn (+ex)
     do k = 1, xsize(3)
        do j = 1, xsize(2)
           if (ux(nx-1,j,k).gt.uxnmax) uxnmax = ux(nx-1,j,k)
           if (ux(nx-1,j,k).lt.uxnmin) uxnmin = ux(nx-1,j,k)
+          uxnmean = uxnmean + ux(nx-1,j,k)
        enddo
     enddo
+    uxnmean = uxnmean/xsize(2)/xsize(3)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
-   !  cxn = half*(uxnmax+uxnmin)*gdt(itr)*udx
-   !  bxxn(:,:) = ux(nx,:,:)-cxn*(ux(nx,:,:)-ux(nx-1,:,:))
-   !  bxyn(:,:) = uy(nx,:,:)-cxn*(uy(nx,:,:)-uy(nx-1,:,:))
-   !  bxzn(:,:) = uz(nx,:,:)-cxn*(uz(nx,:,:)-uz(nx-1,:,:))
-   !  if (iscalar.eq.1) phi(nx,:,:,:) = phi(nx-1,:,:,:)
-    do k = 1, xsize(3)
-       do j = 1, xsize(2)
-          un = ux(nx-1,j,k)
-          cxn = un*gdt(itr)*udx
-          if (un.gt.zero) then
+    call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
+    uxnmean = uxnmean/nproc
+    if (iopen.eq.0) then
+       !convective outflow using parabolic profile
+       do k = 1, xsize(3)
+          z = (k+xstart(3)-2)*dz-zlz/two
+          do j = 1, xsize(2)
+             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+             x = xlx/two
+             r = sqrt(x*x+z*z)
+             un = three*(one-four*y*y/yly/yly)/yly/r/sixteen*x/r
+             cxn = un*gdt(itr)*udx
              bxxn(j,k) = ux(nx,j,k)-cxn*(ux(nx,j,k)-ux(nx-1,j,k))
              bxyn(j,k) = uy(nx,j,k)-cxn*(uy(nx,j,k)-uy(nx-1,j,k))
              bxzn(j,k) = uz(nx,j,k)-cxn*(uz(nx,j,k)-uz(nx-1,j,k))
              if (iscalar.eq.1) then
-                do is = 1, numscalar
-                   phi(nx,j,k,is) = phi(nx,j,k,is)-cxn*(phi(nx,j,k,is)-phi(nx-1,j,k,is))
-                enddo
+                phi(nx,j,k,:) = phi(nx,j,k,:)-cxn*(phi(nx,j,k,:)-phi(nx-1,j,k,:))
              endif
-          else
-             bxxn(j,k) = ux(nx-1,j,k)
-             bxyn(j,k) = uy(nx-1,j,k)
-             bxzn(j,k) = uz(nx-1,j,k)
-             if (iscalar.eq.1) then
-                do is = 1, numscalar
-                   phi(nx,j,k,is) = phi(nx-1,j,k,is)
-                enddo
-             endif
-          endif
+          enddo
        enddo
-    enddo
+    elseif (iopen.eq.1) then
+       !open boundary: zero-gradient + reverse flow (inflow velocity set to 0)
+       do k = 1, xsize(3)
+          do j = 1, xsize(2)
+             un = ux(nx-1,j,k)
+             if (un.ge.zero) then
+                bxxn(j,k) = ux(nx-1,j,k)
+                bxyn(j,k) = uy(nx-1,j,k)
+                bxzn(j,k) = uz(nx-1,j,k)
+                if (iscalar.eq.1) then
+                   phi(nx,j,k,:) = phi(nx-1,j,k,:)
+                endif
+             else
+                bxxn(j,k) = zero
+                bxyn(j,k) = zero
+                bxzn(j,k) = zero
+                if (iscalar.eq.1) then
+                   phi(nx,j,k,:) = zero
+                endif
+             endif
+          enddo
+       enddo
+    endif
 
     !z1 (-ez)
     if (xstart(3).eq.1) then
@@ -284,44 +318,58 @@ contains
           do i = 1, xsize(1)
              if (uz(i,j,2).gt.uz1max) uz1max = uz(i,j,2)
              if (uz(i,j,2).lt.uz1min) uz1min = uz(i,j,2)
+             uz1mean = uz1mean + uz(i,j,2)
           enddo
        enddo
     endif
+    uz1mean = uz1mean/xsize(1)/xsize(2)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uz1max,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uz1min,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
-   !  cz1 = half*(uz1max+uz1min)*gdt(itr)*udz
-   !  if (xstart(3).eq.1) then
-   !     bzx1(:,:) = ux(:,:,1)-cz1*(ux(:,:,2)-ux(:,:,1))
-   !     bzy1(:,:) = uy(:,:,1)-cz1*(uy(:,:,2)-uy(:,:,1))
-   !     bzz1(:,:) = uz(:,:,1)-cz1*(uz(:,:,2)-uz(:,:,1))
-   !     if (iscalar.eq.1) phi(:,:,1,:) = phi(:,:,2,:)
-   !  endif
+    call MPI_ALLREDUCE(MPI_IN_PLACE,uz1mean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
+    uz1mean = uz1mean/nproc
     if (xstart(3).eq.1) then
-       do j = 1, xsize(2)
-          do i = 1, xsize(1)
-             un = -uz(i,j,2)
-             cz1 = un*gdt(itr)*udz
-             if (un.gt.zero) then
+       if (iopen.eq.0) then
+          !convective outflow using parabolic profile
+          do j = 1, xsize(2)
+             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+             do i = 1, xsize(1)
+                x = (i+xstart(1)-2)*dx-xlx/two
+                z = -zlz/two
+                r = sqrt(x*x+z*z)
+                un = three*(one-four*y*y/yly/yly)/yly/r/sixteen*z/r
+                cz1 = un*gdt(itr)*udz
                 bzx1(i,j) = ux(i,j,1)-cz1*(ux(i,j,2)-ux(i,j,1))
                 bzy1(i,j) = uy(i,j,1)-cz1*(uy(i,j,2)-uy(i,j,1))
                 bzz1(i,j) = uz(i,j,1)-cz1*(uz(i,j,2)-uz(i,j,1))
                 if (iscalar.eq.1) then
-                   do is = 1, numscalar
-                      phi(i,j,1,is) = phi(i,j,1,is)-cz1*(phi(i,j,2,is)-phi(i,j,1,is))
-                   enddo
+                   phi(i,j,1,:) = phi(i,j,1,:)-cz1*(phi(i,j,2,:)-phi(i,j,1,:))
                 endif
-             else
-                bzx1(i,j) = ux(i,j,2)
-                bzy1(i,j) = uy(i,j,2)
-                bzz1(i,j) = uz(i,j,2)
-                if (iscalar.eq.1) then
-                   do is = 1, numscalar
-                      phi(i,j,1,is) = phi(i,j,2,is)
-                   enddo
-                endif
-             endif
+             enddo
           enddo
-       enddo
+       elseif (iopen.eq.1) then
+          !open boundary: zero-gradient + reverse flow (inflow velocity set to 0)
+          do j = 1, xsize(2)
+             do i = 1, xsize(1)
+                un = -uz(i,j,2)
+                if (un.ge.zero) then
+                   bzx1(i,j) = ux(i,j,2)
+                   bzy1(i,j) = uy(i,j,2)
+                   bzz1(i,j) = uz(i,j,2)
+                   if (iscalar.eq.1) then
+                      phi(i,j,1,:) = phi(i,j,2,:)
+                   endif
+                else
+                   bzx1(i,j) = zero
+                   bzy1(i,j) = zero
+                   bzz1(i,j) = zero
+                   if (iscalar.eq.1) then
+                      phi(i,j,1,:) = zero
+                   endif
+                endif
+             enddo
+          enddo
+       endif
     endif
 
     !zn (+ez)
@@ -330,51 +378,70 @@ contains
           do i = 1, xsize(1)
              if (uz(i,j,xsize(3)-1).gt.uznmax) uznmax = uz(i,j,xsize(3)-1)
              if (uz(i,j,xsize(3)-1).lt.uznmin) uznmin = uz(i,j,xsize(3)-1)
+             uznmean = uznmean + uz(i,j,xsize(3)-1)
           enddo
        enddo
     endif
+    uznmean = uznmean/xsize(1)/xsize(2)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uznmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uznmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
-   !  czn = half*(uznmax+uznmin)*gdt(itr)*udz
-   !  if (xend(3).eq.nz) then
-   !     bzxn(:,:) = ux(:,:,xsize(3))-czn*(ux(:,:,xsize(3))-ux(:,:,xsize(3)-1))
-   !     bzyn(:,:) = uy(:,:,xsize(3))-czn*(uy(:,:,xsize(3))-uy(:,:,xsize(3)-1))
-   !     bzzn(:,:) = uz(:,:,xsize(3))-czn*(uz(:,:,xsize(3))-uz(:,:,xsize(3)-1))
-   !     if (iscalar.eq.1) phi(:,:,xsize(3),:) = phi(:,:,xsize(3)-1,:)
-   !  endif
+    call MPI_ALLREDUCE(MPI_IN_PLACE,uznmean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
+    uznmean = uznmean/nproc
     if (xend(3).eq.nz) then
-       do j = 1, xsize(2)
-          do i = 1, xsize(1)
-             un = uz(i,j,xsize(3)-1)
-             czn = un*gdt(itr)*udz
-             if (un.gt.zero) then
-                bzxn(i,j) = ux(i,j,xsize(3))-czn*(ux(i,j,xsize(3))-ux(i,j,xsize(3)-1))
-                bzyn(i,j) = uy(i,j,xsize(3))-czn*(uy(i,j,xsize(3))-uy(i,j,xsize(3)-1))
-                bzzn(i,j) = uz(i,j,xsize(3))-czn*(uz(i,j,xsize(3))-uz(i,j,xsize(3)-1))
+       if (iopen.eq.0) then
+          !convective outflow using parabolic profile
+          do j = 1, xsize(2)
+             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+             if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+             do i = 1, xsize(1)
+                x = (i+xstart(1)-2)*dx-xlx/two
+                z = zlz/two
+                r = sqrt(x*x+z*z)
+                un = three*(one-four*y*y/yly/yly)/yly/r/sixteen*z/r
+                czn = un*gdt(itr)*udz
+                bzxn(i,j) = ux(i,j,nz)-czn*(ux(i,j,nz)-ux(i,j,nz-1))
+                bzyn(i,j) = uy(i,j,nz)-czn*(uy(i,j,nz)-uy(i,j,nz-1))
+                bzzn(i,j) = uz(i,j,nz)-czn*(uz(i,j,nz)-uz(i,j,nz-1))
                 if (iscalar.eq.1) then
-                   do is = 1, numscalar
-                      phi(i,j,xsize(3),is) = phi(i,j,xsize(3),is)-czn*(phi(i,j,xsize(3),is)-phi(i,j,xsize(3)-1,is))
-                   enddo
+                   phi(i,j,nz,:) = phi(i,j,nz,:)-czn*(phi(i,j,nz,:)-phi(i,j,nz-1,:))
                 endif
-             else
-                bzxn(i,j) = ux(i,j,xsize(3)-1)
-                bzyn(i,j) = uy(i,j,xsize(3)-1)
-                bzzn(i,j) = uz(i,j,xsize(3)-1)
-                if (iscalar.eq.1) then
-                   do is = 1, numscalar
-                      phi(i,j,xsize(3),is) = phi(i,j,xsize(3)-1,is)
-                   enddo
-                endif
-             endif
+             enddo
           enddo
-       enddo
+       elseif (iopen.eq.1) then
+          !open boundary: zero-gradient + reverse flow (inflow velocity set to 0)
+          do j = 1, xsize(2)
+             do i = 1, xsize(1)
+                un = uz(i,j,xsize(3)-1)
+                if (un.ge.zero) then
+                   bzxn(i,j) = ux(i,j,xsize(3)-1)
+                   bzyn(i,j) = uy(i,j,xsize(3)-1)
+                   bzzn(i,j) = uz(i,j,xsize(3)-1)
+                   if (iscalar.eq.1) then
+                      phi(i,j,nz,:) = phi(i,j,nz-1,:)
+                   endif
+                else
+                   bzxn(i,j) = zero
+                   bzyn(i,j) = zero
+                   bzzn(i,j) = zero
+                   if (iscalar.eq.1) then
+                      phi(i,j,nz,:) = zero
+                   endif
+                endif
+             enddo
+          enddo
+       endif
     endif
 
     if (nrank==0 .and. (mod(itime, ilist)==0 .or. itime==ifirst .or. itime==ilast)) then
-       write(*,*) "Outflow velocity ux1 min max=",real(ux1min,4),real(ux1max,4)
-       write(*,*) "Outflow velocity uxn min max=",real(uxnmin,4),real(uxnmax,4)
-       write(*,*) "Outflow velocity uz1 min max=",real(uz1min,4),real(uz1max,4)
-       write(*,*) "Outflow velocity uzn min max=",real(uznmin,4),real(uznmax,4)
+       if (iopen.eq.0) then
+          write(*,*) "Convective outflow BCs at x1 and xn: using parabolic profile"
+       elseif (iopen.eq.1) then
+          write(*,*) "Open boundary BCs at x1 and xn: zero-gradient + reverse flow"
+       endif
+       write(*,*) "Outflow velocity ux1 min max=",real(ux1min,4),real(ux1max,4),real(ux1mean,4)
+       write(*,*) "Outflow velocity uxn min max=",real(uxnmin,4),real(uxnmax,4),real(uxnmean,4)
+       write(*,*) "Outflow velocity uz1 min max=",real(uz1min,4),real(uz1max,4),real(uz1mean,4)
+       write(*,*) "Outflow velocity uzn min max=",real(uznmin,4),real(uznmax,4),real(uznmean,4)
     endif
 
     return
@@ -404,6 +471,7 @@ contains
                 phi(i,1,k,is) = (eighteen*phi(i,2,k,is)-nine*phi(i,3,k,is)+two*phi(i,4,k,is)+six*dy0*qflux)/eleven
              enddo
           enddo
+          if (nrank .eq. 0) write(*,*) 'Neumann BC for scalar (third-order uniform grid)'
        else
           dy0 = yp(xstart(2)+1)-yp(xstart(2))
           dy1 = yp(xstart(2)+2)-yp(xstart(2)+1)
@@ -416,6 +484,7 @@ contains
                 phi(i,1,k,is) = -(qflux+a1*phi(i,2,k,is)+a2*phi(i,3,k,is))/a0
              enddo
           enddo
+          if (nrank .eq. 0) write(*,*) 'Neumann BC for scalar (second-order stretched grid)'
        endif
     endif
 
@@ -456,6 +525,7 @@ contains
              enddo
           enddo
        enddo
+       if (nrank .eq. 0) write(*,*) '# fringe forcing applied at rm=', fringe_rm
     endif
 
     return
@@ -480,48 +550,6 @@ contains
 
     ux1=zero; uy1=zero; uz1=zero
 
-    delta = 0.05_mytype
-    n = 28._mytype
-    Lseed = 2._mytype
-    
-    if (iin==1 .or. iin==2) then
-       call system_clock(count = code)
-       if (iin.eq.2) code = 0
-       call random_seed(size = ii)
-       call random_seed(put = code+63946*(nrank+1)*(/ (i - 1, i = 1, ii) /))
-
-       call random_number(ux1)
-       call random_number(uy1)
-       call random_number(uz1)
-
-       do k = 1, xsize(3)
-          do j = 1, xsize(2)
-             do i = 1, xsize(1)
-                ux1(i,j,k) = init_noise*(ux1(i,j,k)-half)
-                uy1(i,j,k) = init_noise*(uy1(i,j,k)-half)
-                uz1(i,j,k) = init_noise*(uz1(i,j,k)-half)
-             enddo
-          enddo
-       enddo
-
-       !modulation of the random noise
-       do k = 1, xsize(3)
-          z = (k+xstart(3)-2)*dz-zlz/two
-          do j = 1, xsize(2)
-             if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
-             if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
-             do i = 1, xsize(1)
-                x = (i+xstart(1)-2)*dx-xlx/two
-                r = sqrt(x*x+z*z)
-                um = (one-erf((r-half)/delta))/two
-                ux1(i,j,k) = um*ux1(i,j,k)
-                uy1(i,j,k) = um*uy1(i,j,k)
-                uz1(i,j,k) = um*uz1(i,j,k)
-             enddo
-          enddo
-       enddo
-    endif
-
     if(iin.eq.4) then
       !Read velocity field
       if (nrank.eq.0) write(*,*) 'reading : ', './data/ux.bin'
@@ -530,45 +558,15 @@ contains
       call decomp_2d_read_one(1,uy1,'data','uy.bin',io_jet,reduce_prec=.false.)
       if (nrank.eq.0) write(*,*) 'reading : ', './data/uz.bin'
       call decomp_2d_read_one(1,uz1,'data','uz.bin',io_jet,reduce_prec=.false.)
+    endif
 
-      if (iscalar.eq.1) then
-        do is = 1, numscalar
+    if (iscalar.eq.1) then
+      do is = 1, numscalar
           phi1(:,:,:,is) = zero
-        enddo
-      endif
-    else
-       !INIT FOR G AND U=MEAN FLOW + NOISE
-       do k = 1, xsize(3)
-          z = (k+xstart(3)-2)*dz-zlz/two
-          do j = 1, xsize(2)
-             if (istret.eq.0) y = (j+xstart(2)-2)*dy-yly/two
-             if (istret.ne.0) y = yp(j+xstart(2)-1)-yly/two
-             sw = zero
-             if (y.ge.(yly/two-Lseed)) then
-                eta = (y-(yly/two-Lseed))/Lseed
-                sw = half*(one-cos(pi*eta))
-             endif 
-             do i = 1, xsize(1)
-                x = (i+xstart(1)-2)*dx-xlx/two
-                r = sqrt(x*x+z*z)
-                um = (one-erf((r-half)/delta))/two
-                ux1(i,j,k) = ux1(i,j,k)
-                uy1(i,j,k) = uy1(i,j,k) - (n+two)/n*um*sw
-                uz1(i,j,k) = uz1(i,j,k)
-             enddo
-          enddo
-       enddo
-
-       if (iscalar.eq.1) then
-         do is = 1, numscalar
-            phi1(:,:,:,is) = zero
-         enddo
-       endif
+      enddo
     endif
     
-#ifdef DEBG
     if (nrank .eq. 0) write(*,*) '# init end ok'
-#endif
 
     return
   end subroutine init_impingingjet
@@ -607,7 +605,7 @@ contains
     USE var, only : ta2,tb2,tc2,td2,te2,tf2,di2
     USE var, only : ta3,tb3,tc3,td3,te3,tf3,di3
     use var, ONLY : nxmsize, nymsize, nzmsize
-    use visu, only : write_field
+    use visu, only : write_field, write_xdmf_vector
     use ibm_param, only : ubcx,ubcy,ubcz
 
     implicit none
@@ -663,10 +661,19 @@ contains
     
     !VORTICITY FIELD
     di1 = zero
-    di1(:,:,:)=sqrt(  (tf1(:,:,:)-th1(:,:,:))**2 &
-                    + (tg1(:,:,:)-tc1(:,:,:))**2 &
-                    + (tb1(:,:,:)-td1(:,:,:))**2)
-    call write_field(di1, ".", "vort", num, flush = .true.) ! Reusing temporary array, force flush
+    di1(:,:,:) = tf1(:,:,:)-th1(:,:,:)
+    call write_field(di1, ".", "vorx", num, flush = .true.)
+    di1 = zero
+    di1(:,:,:) = tg1(:,:,:)-tc1(:,:,:)
+    call write_field(di1, ".", "vory", num, flush = .true.)
+    di1 = zero
+    di1(:,:,:) = tb1(:,:,:)-td1(:,:,:)
+    call write_field(di1, ".", "vorz", num, flush = .true.)
+    call write_xdmf_vector(".", "Vort", "vorx", "vory", "vorz", num)
+   !  di1(:,:,:)=sqrt(  (tf1(:,:,:)-th1(:,:,:))**2 &
+   !                  + (tg1(:,:,:)-tc1(:,:,:))**2 &
+   !                  + (tb1(:,:,:)-td1(:,:,:))**2)
+   !  call write_field(di1, ".", "vort", num, flush = .true.) ! Reusing temporary array, force flush
 
     !Q=-0.5*(ta1**2+te1**2+ti1**2)-td1*tb1-tg1*tc1-th1*tf1
     di1 = zero
