@@ -69,12 +69,15 @@ contains
 
     implicit none
 
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
+    real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
 
     integer :: i, k
-    real(mytype) :: x, z, r, n
-    
-    n = 28._mytype
+    real(mytype) :: x, z, r, um
+    real(mytype), dimension(xsize(1),xsize(3)) :: uxprime, uyprime, uzprime
+
+    call random_number(uxprime)
+    call random_number(uyprime)
+    call random_number(uzprime)
 
     !Top boundary
     do k = 1,xsize(3)
@@ -82,10 +85,11 @@ contains
        do i = 1,xsize(1)
           x = (i+xstart(1)-2)*dx-xlx/two
           r = sqrt(x*x)
+          um = one-(two*r)**u2
           if (r.le.half) then
-             byxn(i,k) = zero
-             byyn(i,k) = -(n+one)/n*(one-(two*r)**n)*(one-exp(-half*t*t))
-             byzn(i,k) = zero
+             byxn(i,k) = zero + (uxprime(i,k)-half)*um*inflow_noise
+             byyn(i,k) = -(u2+one)/u2*(one-(two*r)**u2)*(one-exp(-half*t*t)) + (uyprime(i,k)-half)*um*inflow_noise
+             byzn(i,k) = zero + (uzprime(i,k)-half)*um*inflow_noise
           else
              byxn(i,k) = zero
              byyn(i,k) = zero
@@ -226,9 +230,9 @@ contains
 
     if (nrank==0 .and. (mod(itime, ilist)==0 .or. itime==ifirst .or. itime==ilast)) then
        if (iopen.eq.0) then
-          write(*,*) "Convective outflow BCs at x1 and xn: using parabolic profile"
+          write(*,*) "Convective outflow BCs: using parabolic profile"
        elseif (iopen.eq.1) then
-          write(*,*) "Open boundary BCs at x1 and xn: zero-gradient + reverse flow"
+          write(*,*) "Open boundary BCs: zero-gradient + reverse flow"
        endif
        write(*,*) "Outflow velocity ux1 min max mean=",real(ux1min,4),real(ux1max,4),real(ux1mean,4)
        write(*,*) "Outflow velocity uxn min max mean=",real(uxnmin,4),real(uxnmax,4),real(uxnmean,4)
@@ -316,7 +320,7 @@ contains
              enddo
           enddo
        enddo
-       if (nrank .eq. 0) write(*,*) '# fringe forcing applied at rm=', fringe_rm
+      !  if (nrank .eq. 0) write(*,*) '# fringe forcing applied at rm=', fringe_rm
     endif
 
     return

@@ -77,7 +77,7 @@ contains
 
     integer :: i, k, is, m
     real(mytype) :: x, z, r, theta, delta, sw
-    real(mytype) :: n, um, sigma, Stc, omega_c, tauA, sigmaA, rhoA, xi
+    real(mytype) :: um, sigma, Stc, omega_c, tauA, sigmaA, rhoA, xi
     real(mytype) :: uxprime, uyprime, uzprime
 
     integer, parameter :: NMODE = 8
@@ -86,16 +86,16 @@ contains
     real(mytype), save :: omegax(NMODE), omegay(NMODE), omegaz(NMODE)
     logical, save      :: inflow_init = .false.
     
-    n = 28._mytype
     delta = three*sqrt(dx*dz)
 
     sigma = 100._mytype
     Stc = 1._mytype
     omega_c = two*pi*Stc
     tauA = one/omega_c
-    sigmaA = 0.2_mytype*sqrt(two/real(NMODE,mytype))
     rhoA = exp(-dt/tauA)
 
+    sigmaA = inflow_noise*sqrt(two/real(NMODE,mytype))
+    
     if (.not. inflow_init) then
       call random_seed()
 
@@ -115,7 +115,7 @@ contains
     endif
 
     if (iin.ne.0) then
-      write(*,*) "# inflow using synthetic perturbation: A*cos(m*theta+phi)"
+      ! if (nrank .eq. 0) write(*,*) "# inflow using synthetic perturbation: A*cos(m*theta+phi)"
       do m = 1, NMODE
          call randn_gauss(xi)
          Amx(m) = rhoA*Amx(m)+sqrt(one-rhoA*rhoA)*sigmaA*xi
@@ -139,7 +139,7 @@ contains
           theta = atan2(z,x)
 
           uxprime = zero; uyprime = zero; uzprime = zero
-          if (iin.eq.1) then
+          if (iin.ne.0) then
             do m = 1, NMODE
                uxprime = uxprime + Amx(m)*cos(m*theta+phx(m))
                uyprime = uyprime + Amy(m)*cos(m*theta+phy(m))
@@ -152,7 +152,7 @@ contains
              sw = half*(one+cos(pi*(r-(half-delta))/delta))
              if (r.le.half-delta) sw = one
              byxn(i,k) = um*uxprime*sw
-             byyn(i,k) = -(n+two)/n*(one-(two*r)**n)*sw + um*uyprime*sw
+             byyn(i,k) = -(u2+two)/u2*(one-(two*r)**u2)*sw + um*uyprime*sw
              byzn(i,k) = um*uzprime*sw
           else
              byxn(i,k) = zero
@@ -434,9 +434,9 @@ contains
 
     if (nrank==0 .and. (mod(itime, ilist)==0 .or. itime==ifirst .or. itime==ilast)) then
        if (iopen.eq.0) then
-          write(*,*) "Convective outflow BCs at x1 and xn: using parabolic profile"
+          write(*,*) "Convective outflow BCs: using parabolic profile"
        elseif (iopen.eq.1) then
-          write(*,*) "Open boundary BCs at x1 and xn: zero-gradient + reverse flow"
+          write(*,*) "Open boundary BCs: zero-gradient + reverse flow"
        endif
        write(*,*) "Outflow velocity ux1 min max=",real(ux1min,4),real(ux1max,4),real(ux1mean,4)
        write(*,*) "Outflow velocity uxn min max=",real(uxnmin,4),real(uxnmax,4),real(uxnmean,4)
@@ -525,11 +525,10 @@ contains
              enddo
           enddo
        enddo
-       if (nrank .eq. 0) write(*,*) '# fringe forcing applied at rm=', fringe_rm
+      !  if (nrank .eq. 0) write(*,*) '# fringe forcing applied at rm=', fringe_rm
     endif
 
     return
-
   end subroutine momentum_forcing_impingingjet
   !########################################################################
 
@@ -544,9 +543,7 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1,uy1,uz1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
 
-    integer :: i, j, k, is, ii, code
-    real(mytype) :: x, y, z, r, um, delta, n, Lseed, eta, sw
-    character(len=20) :: filename
+    integer :: is
 
     ux1=zero; uy1=zero; uz1=zero
 
