@@ -115,7 +115,6 @@ contains
     endif
 
     if (iin.ne.0) then
-      ! if (nrank .eq. 0) write(*,*) "# inflow using synthetic perturbation: A*cos(m*theta+phi)"
       do m = 1, NMODE
          call randn_gauss(xi)
          Amx(m) = rhoA*Amx(m)+sqrt(one-rhoA*rhoA)*sigmaA*xi
@@ -515,17 +514,13 @@ contains
                 if (r.ge.fringe_rm) then
                    lambda = half*(one+tanh(fringe_beta*(r-fringe_rm)-four))
                    um = three*(one-four*y*y/yly/yly)/yly/r/sixteen
-                   if (ifringe.ne.2) then
-                      duy1(i,j,k,1) = duy1(i,j,k,1) + lambda*(zero-uy1(i,j,k))
-                   endif
-                   !ifringe=2 means only damp u and w
                    dux1(i,j,k,1) = dux1(i,j,k,1) + lambda*(um*x/r-ux1(i,j,k))
+                   duy1(i,j,k,1) = duy1(i,j,k,1) + lambda*(zero-uy1(i,j,k))
                    duz1(i,j,k,1) = duz1(i,j,k,1) + lambda*(um*z/r-uz1(i,j,k))
                 endif
              enddo
           enddo
        enddo
-      !  if (nrank .eq. 0) write(*,*) '# fringe forcing applied at rm=', fringe_rm
     endif
 
     return
