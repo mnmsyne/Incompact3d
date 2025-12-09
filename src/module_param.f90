@@ -310,6 +310,7 @@ module param
        itype_swirljet = 73, &
        itype_impingingjet = 74, &
        itype_planeimpinging = 741, &
+       itype_movingjet = 745, &
        itype_tbl = 9, &
        itype_abl = 10, &
        itype_uniform = 11, &

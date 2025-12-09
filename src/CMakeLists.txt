@@ -23,6 +23,7 @@ add_executable(xcompact3d
                     Case-Gravity-current.f90
                     Case-Impinging-Jet.f90
                     Case-Mixing-layer.f90
+                    Case-Moving-Jet.f90
                     Case-Periodic-hill.f90
                     Case-Pipe-flow.f90
                     Case-Plane-Impinging.f90

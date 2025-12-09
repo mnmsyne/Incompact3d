@@ -437,10 +437,10 @@ contains
        elseif (iopen.eq.1) then
           write(*,*) "Open boundary BCs: zero-gradient + reverse flow"
        endif
-       write(*,*) "Outflow velocity ux1 min max=",real(ux1min,4),real(ux1max,4),real(ux1mean,4)
-       write(*,*) "Outflow velocity uxn min max=",real(uxnmin,4),real(uxnmax,4),real(uxnmean,4)
-       write(*,*) "Outflow velocity uz1 min max=",real(uz1min,4),real(uz1max,4),real(uz1mean,4)
-       write(*,*) "Outflow velocity uzn min max=",real(uznmin,4),real(uznmax,4),real(uznmean,4)
+       write(*,*) "Outflow velocity ux1 min max mean=",real(ux1min,4),real(ux1max,4),real(ux1mean,4)
+       write(*,*) "Outflow velocity uxn min max mean=",real(uxnmin,4),real(uxnmax,4),real(uxnmean,4)
+       write(*,*) "Outflow velocity uz1 min max mean=",real(uz1min,4),real(uz1max,4),real(uz1mean,4)
+       write(*,*) "Outflow velocity uzn min max mean=",real(uznmin,4),real(uznmax,4),real(uznmean,4)
     endif
 
     return
@@ -470,7 +470,6 @@ contains
                 phi(i,1,k,is) = (eighteen*phi(i,2,k,is)-nine*phi(i,3,k,is)+two*phi(i,4,k,is)+six*dy0*qflux)/eleven
              enddo
           enddo
-          if (nrank .eq. 0) write(*,*) 'Neumann BC for scalar (third-order uniform grid)'
        else
           dy0 = yp(xstart(2)+1)-yp(xstart(2))
           dy1 = yp(xstart(2)+2)-yp(xstart(2)+1)
@@ -483,7 +482,6 @@ contains
                 phi(i,1,k,is) = -(qflux+a1*phi(i,2,k,is)+a2*phi(i,3,k,is))/a0
              enddo
           enddo
-          if (nrank .eq. 0) write(*,*) 'Neumann BC for scalar (second-order stretched grid)'
        endif
     endif
 

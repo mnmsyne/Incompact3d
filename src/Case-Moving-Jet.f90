@@ -2,7 +2,7 @@
 !This file is part of Xcompact3d (xcompact3d.com)
 !SPDX-License-Identifier: BSD 3-Clause
 
-module planeimpinging
+module movingjet
 
   USE decomp_2d_constants
   USE decomp_2d_mpi
@@ -15,12 +15,12 @@ module planeimpinging
   character(len=*), parameter :: io_jet = "io-jet"
 
   PRIVATE !! All functions/subroutines private by default
-  PUBLIC :: boundary_conditions_planeimpinging, momentum_forcing_planeimpinging, init_planeimpinging, &
-            postprocess_planeimpinging, visu_planeimpinging, visu_planeimpinging_init
+  PUBLIC :: boundary_conditions_movingjet, momentum_forcing_movingjet, init_movingjet, &
+            postprocess_movingjet, visu_movingjet, visu_movingjet_init
 
 contains
 
-  subroutine boundary_conditions_planeimpinging (ux, uy, uz, phi)
+  subroutine boundary_conditions_movingjet (ux, uy, uz, phi)
     USE param
     USE variables
 
@@ -28,50 +28,42 @@ contains
 
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-    integer :: is, isT
-    real(mytype) :: qflux
 
-    !Top boundary (yn)
-    call inflow (ux, uy, uz)
-
-    !Side boundary (x1,xn,z1,zn)
-    call outflow (ux, uy, uz, phi)
-
-    !Scalar boundary conditions
-    !Top boundary (yn)
-    if (iscalar.eq.1) then
-       if (xend(2).eq.ny) then
-          !set all scalar components at top to 0
-          do is = 1, numscalar
-             phi(:,xsize(2),:,is) = zero
-          enddo
-       endif
-    endif
+    integer :: i, j, k, is
 
     !Bottom boundary (y1)
     if (iscalar.eq.1) then
        if (xstart(2).eq.1) then
-          isT = 1; qflux = one-exp(-half*t*t)
-          call scalar_neumann (phi,isT,qflux)
-          do is = 2, numscalar
-             phi(:,xstart(2),:,is) = one-exp(-half*t*t)
+          do is = 1, numscalar
+             do k = 1, xsize(3)
+                do i = 1, xsize(1)
+                   phi(i,xstart(2),k,is) = phi(i,xstart(2)+1,k,is)
+                enddo
+             enddo
           enddo
        endif
     endif
 
+    !Top boundary (yn)
+    call inflow (ux, uy, uz, phi)
+
+    !Side boundary (x1,xn)
+    call outflow (ux, uy, uz, phi)
+
     return
-  end subroutine boundary_conditions_planeimpinging
+  end subroutine boundary_conditions_movingjet
   !########################################################################
 
-  subroutine inflow (ux, uy, uz)
+  subroutine inflow (ux, uy, uz, phi)
     USE param
     USE variables
 
     implicit none
 
     real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
+    real(mytype), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
 
-    integer :: i, k
+    integer :: i, j, k, is
     real(mytype) :: x, z, r, um
     real(mytype), dimension(xsize(1),xsize(3)) :: uxprime, uyprime, uzprime
 
@@ -97,6 +89,25 @@ contains
           endif
        enddo
     enddo
+
+    if (iscalar.eq.1) then
+       if (xend(2).eq.ny) then
+          do is = 1, numscalar
+             do k = 1,xsize(3)
+                z = (k+xstart(3)-2)*dz-zlz/two
+                do i = 1,xsize(1)
+                   x = (i+xstart(1)-2)*dx-xlx/two
+                   r = sqrt(x*x)
+                   if (r.le.half) then
+                      phi(i,xsize(2),k,is) = cp(is)*(one-exp(-half*t*t))
+                   else
+                      phi(i,xsize(2),k,is) = phi(i,xsize(2)-1,k,is)
+                   endif
+                enddo
+             enddo
+          enddo
+       endif
+    endif
 
     return
   end subroutine inflow
@@ -242,48 +253,7 @@ contains
   end subroutine outflow
   !########################################################################
 
-  subroutine scalar_neumann (phi,is,qflux)
-    USE param
-    USE variables
- 
-    implicit none
-
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-    integer,intent(in) :: is
-    real(mytype),intent(in):: qflux
-
-    integer :: i, k
-    real(mytype) :: dy0, dy1, a0, a1, a2
-
-    !Dairay et al., Int. J. Heat Fluid Flow (2014) 
-    if (xstart(2).eq.1) then
-       if (istret.eq.0) then
-          dy0 = dy
-          do k = 1, xsize(3)
-             do i = 1, xsize(1)
-                !T1 = (18*T2 - 9*T3 + 2*T4 + 6*dy0*qflux)/11
-                phi(i,1,k,is) = (eighteen*phi(i,2,k,is)-nine*phi(i,3,k,is)+two*phi(i,4,k,is)+six*dy0*qflux)/eleven
-             enddo
-          enddo
-       else
-          dy0 = yp(xstart(2)+1)-yp(xstart(2))
-          dy1 = yp(xstart(2)+2)-yp(xstart(2)+1)
-          a0 = -(two*dy0 + dy1)/dy0/(dy0 + dy1)
-          a1 =  (dy0+dy1)/dy0/dy1
-          a2 = - dy0/dy1/(dy0 + dy1)
-          do k = 1, xsize(3)
-             do i = 1, xsize(1)
-                !T1 = (-qflux - a1*T2 - a2*T3)/a0
-                phi(i,1,k,is) = -(qflux+a1*phi(i,2,k,is)+a2*phi(i,3,k,is))/a0
-             enddo
-          enddo
-       endif
-    endif
-
-  end subroutine scalar_neumann
-  !########################################################################
-
-  subroutine momentum_forcing_planeimpinging(dux1,duy1,duz1,ux1,uy1,uz1)
+  subroutine momentum_forcing_movingjet(dux1,duy1,duz1,ux1,uy1,uz1)
     USE param
     USE variables
 
@@ -321,10 +291,10 @@ contains
     endif
 
     return
-  end subroutine momentum_forcing_planeimpinging
+  end subroutine momentum_forcing_movingjet
   !########################################################################
 
-  subroutine init_planeimpinging (ux1,uy1,uz1,phi1)
+  subroutine init_movingjet (ux1,uy1,uz1,phi1)
     USE decomp_2d_io
     USE variables
     USE param
@@ -358,10 +328,10 @@ contains
     if (nrank .eq. 0) write(*,*) '# init end ok'
 
     return
-  end subroutine init_planeimpinging
+  end subroutine init_movingjet
   !########################################################################
 
-  subroutine postprocess_planeimpinging (ux1,uy1,uz1,pp3,phi1,ep1)
+  subroutine postprocess_movingjet (ux1,uy1,uz1,pp3,phi1,ep1)
     use var, ONLY : nzmsize
     implicit none
 
@@ -369,9 +339,9 @@ contains
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
     real(mytype), intent(in), dimension(ph1%zst(1):ph1%zen(1),ph1%zst(2):ph1%zen(2),nzmsize,npress) :: pp3
 
-  end subroutine postprocess_planeimpinging
+  end subroutine postprocess_movingjet
 
-  subroutine visu_planeimpinging_init (visu_initialised)
+  subroutine visu_movingjet_init (visu_initialised)
 
     use decomp_2d_io, only : decomp_2d_register_variable
     use visu, only : io_name, output2D
@@ -385,10 +355,10 @@ contains
 
     visu_initialised = .true.
     
-  end subroutine visu_planeimpinging_init
+  end subroutine visu_movingjet_init
   !########################################################################
 
-  subroutine visu_planeimpinging (ux1, uy1, uz1, pp3, phi1, ep1, num)
+  subroutine visu_movingjet (ux1, uy1, uz1, pp3, phi1, ep1, num)
     use var, only : ux2, uy2, uz2, ux3, uy3, uz3
     USE var, only : ta1,tb1,tc1,td1,te1,tf1,tg1,th1,ti1,di1
     USE var, only : ta2,tb2,tc2,td2,te2,tf2,di2
@@ -404,10 +374,6 @@ contains
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3)) :: ep1
     integer, intent(in) :: num
-
-    integer :: i, k, ierr
-    real(mytype) :: dy0, dy1, numax01, numax02
-    real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: nu01, nu02
 
     ! Write vorticity as an example of post processing
 
@@ -468,44 +434,7 @@ contains
                  - th1(:,:,:) * tf1(:,:,:)
     call write_field(di1, ".", "critq", num, flush = .true.) ! Reusing temporary array, force flush
 
-    !Nusselt number
-    numax01 = -1609._mytype; numax02 = -1609._mytype;
-    if (iscalar.eq.1) then
-       nu01 = zero; nu02 = zero
-       if (xstart(2).eq.1) then
-          do k = 1, xsize(3)
-             do i = 1, xsize(1)
-                if (abs(phi1(i,1,k,1)).gt.1.0e-12_mytype) nu01(i,1,k) = one/phi1(i,1,k,1)
-                if (nu01(i,1,k).gt.numax01) numax01 = nu01(i,1,k)
-
-                if (numscalar.ge.2) then
-                   if (istret.eq.0) then
-                      dy0 = dy
-                      nu02(i,1,k) = -(-eleven*phi1(i,1,k,2)+eighteen*phi1(i,2,k,2)-nine*phi1(i,3,k,2)+two*phi1(i,4,k,2))/six/dy0
-                   else
-                      dy0 = yp(xstart(2)+1)-yp(xstart(2))
-                      dy1 = yp(xstart(2)+2)-yp(xstart(2)+1)
-                      nu02(i,1,k) = -(-phi1(i,1,k,2)*(two*dy0+dy1)/dy0/(dy0+dy1) &
-                                    + phi1(i,2,k,2)*(dy0+dy1)/dy0/dy1 - phi1(i,3,k,2)*dy0/dy1/(dy0+dy1))
-                   endif
-                   if (nu02(i,1,k).gt.numax02) numax02 = nu02(i,1,k)
-                endif
-             enddo
-          enddo
-       endif
-       
-       call write_field(nu01, ".", "nu01", num)
-       call MPI_ALLREDUCE(MPI_IN_PLACE,numax01,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-       if (nrank==0) write(*,*) "Nusselt number nu01 max=", real(numax01,4)
-
-       if (numscalar.ge.2) then
-          call write_field(nu02, ".", "nu02", num)
-          call MPI_ALLREDUCE(MPI_IN_PLACE,numax02,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-          if (nrank==0) write(*,*) "Nusselt number nu02 max=", real(numax02,4)
-       endif
-    endif
-
-  end subroutine visu_planeimpinging
+  end subroutine visu_movingjet
   !########################################################################
 
-end module planeimpinging
+end module movingjet

@@ -71,7 +71,8 @@ subroutine parameter(input_i3d)
   NAMELIST /ProbeSpectra/ Pro_Spectra,X_Pro_Spectra,Z_Pro_Spectra
   NAMELIST /Tripping/ itrip,A_tr,xs_tr_tbl,ys_tr_tbl,ts_tr_tbl,x0_tr_tbl
   NAMELIST /Oscillation/ ioscl, dir_oscl, A_oscl, freq_oscl, oscl_time
-  NAMELIST /ibmstuff/ cex,cey,cez,ra,rai,rao,nobjmax,nraf,nvol,iforces, npif, izap, ianal, imove, thickness, chord, omega ,ubcx,ubcy,ubcz,rads, c_air
+  NAMELIST /ibmstuff/ cex,cey,cez,ra,rai,rao,nobjmax,nraf,nvol,iforces, &
+       npif, izap, ianal, imove, thickness, chord, omega ,ubcx,ubcy,ubcz,rads, c_air
   NAMELIST /LMN/ dens1, dens2, prandtl, ilmn_bound, ivarcoeff, ilmn_solve_temp, &
        massfrac, mol_weight, imultispecies, primary_species, &
        Fr, ibirman_eos
@@ -252,7 +253,9 @@ subroutine parameter(input_i3d)
      read(10, nml=ProbeSpectra); rewind(10)
   end if
   
-  if (itype==itype_impingingjet .or. itype==itype_planeimpinging) then
+  if (itype==itype_impingingjet .or. & 
+      itype==itype_planeimpinging .or. &
+      itype==itype_movingjet) then
      read(10, nml=FringeMethod); rewind(10)
   endif
 
@@ -407,6 +410,8 @@ subroutine parameter(input_i3d)
         print *,'(Circular) Impinging jet'
      elseif (itype.eq.itype_planeimpinging) then
         print *,'Plane impinging jet'
+     elseif (itype.eq.itype_movingjet) then
+        print *,'Moving (plane impinging) jet'
      elseif (itype.eq.itype_tbl) then
         print *,'Turbulent boundary layer'
      elseif (itype.eq.itype_abl) then

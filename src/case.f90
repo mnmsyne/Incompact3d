@@ -21,6 +21,7 @@ module case
   use swirljet
   use impingingjet
   use planeimpinging
+  use movingjet
   use tbl
   use abl
   use uniform
@@ -116,6 +117,10 @@ contains
     elseif (itype.eq.itype_planeimpinging) then
 
        call init_planeimpinging (ux1, uy1, uz1, phi1)
+      
+    elseif (itype.eq.itype_movingjet) then
+
+       call init_movingjet (ux1, uy1, uz1, phi1)
 
     elseif (itype.eq.itype_tbl) then
 
@@ -245,6 +250,10 @@ contains
     elseif (itype.eq.itype_planeimpinging) then
 
        call boundary_conditions_planeimpinging (ux, uy, uz, phi)
+
+    elseif (itype.eq.itype_movingjet) then
+
+       call boundary_conditions_movingjet (ux, uy, uz, phi)
 
     elseif (itype.eq.itype_tbl) then
 
@@ -456,6 +465,10 @@ contains
 
        call postprocess_planeimpinging (ux, uy, uz, pp, phi, ep)
 
+    elseif (itype.eq.itype_movingjet) then
+
+       call postprocess_movingjet (ux, uy, uz, pp, phi, ep)
+
     elseif (itype.eq.itype_ptbl) then
       
        call postprocess_ptbl (ux, uy, uz, pp, phi, ep)
@@ -526,6 +539,10 @@ contains
     else if (itype .eq. itype_planeimpinging) then
 
        call visu_planeimpinging_init(case_visu_init)
+
+    else if (itype .eq. itype_movingjet) then
+
+       call visu_movingjet_init(case_visu_init)
 
     else if (itype .eq. itype_uniform) then
 
@@ -625,6 +642,11 @@ contains
        call visu_planeimpinging(ux1, uy1, uz1, pp3, phi1, ep1, num)
        called_visu = .true. 
 
+    elseif (itype.eq.itype_movingjet) then
+
+       call visu_movingjet(ux1, uy1, uz1, pp3, phi1, ep1, num)
+       called_visu = .true. 
+
     elseif (itype.eq.itype_tbl) then
 
        call visu_tbl(ux1, uy1, uz1, pp3, phi1, ep1, num)
@@ -697,6 +719,10 @@ contains
     elseif (itype.eq.itype_planeimpinging) then
 
        call momentum_forcing_planeimpinging(dux1, duy1, duz1, ux1, uy1, uz1)
+
+    elseif (itype.eq.itype_movingjet) then
+
+       call momentum_forcing_movingjet(dux1, duy1, duz1, ux1, uy1, uz1)
 
     elseif (itype.eq.itype_walljet) then
 
