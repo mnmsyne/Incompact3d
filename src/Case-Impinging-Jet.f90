@@ -226,9 +226,6 @@ contains
              bxx1(j,k) = ux(1,j,k)-cx1*(ux(2,j,k)-ux(1,j,k))
              bxy1(j,k) = uy(1,j,k)-cx1*(uy(2,j,k)-uy(1,j,k))
              bxz1(j,k) = uz(1,j,k)-cx1*(uz(2,j,k)-uz(1,j,k))
-             if (iscalar.eq.1) then
-                phi(1,j,k,:) = phi(1,j,k,:)-cx1*(phi(2,j,k,:)-phi(1,j,k,:))
-             endif
           enddo
        enddo
     elseif (iopen.eq.1) then
@@ -240,19 +237,42 @@ contains
                 bxx1(j,k) = ux(2,j,k)
                 bxy1(j,k) = uy(2,j,k)
                 bxz1(j,k) = uz(2,j,k)
-                if (iscalar.eq.1) then
-                   phi(1,j,k,:) = phi(2,j,k,:)
-                endif
              else
                 bxx1(j,k) = zero
                 bxy1(j,k) = zero
                 bxz1(j,k) = zero
-                if (iscalar.eq.1) then
-                   phi(1,j,k,:) = zero
-                endif
              endif
           enddo
        enddo
+    endif
+    if (iscalar.eq.1) then
+       if (iopenS.eq.0) then
+          !convective outflow using parabolic profile
+          do k = 1, xsize(3)
+             z = (k+xstart(3)-2)*dz-zlz/two
+             do j = 1, xsize(2)
+                if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+                if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+                x = -xlx/two
+                r = sqrt(x*x+z*z)
+                un = three*(one-four*y*y/yly/yly)/yly/r/sixteen*x/r
+                cx1 = un*gdt(itr)*udx
+                phi(1,j,k,:) = phi(1,j,k,:)-cx1*(phi(2,j,k,:)-phi(1,j,k,:))
+             enddo
+          enddo
+       elseif (iopenS.eq.1) then
+          !open boundary: zero-gradient + reverse flow (inflow scalar set to 0)
+          do k = 1, xsize(3)
+             do j = 1, xsize(2)
+                un = -ux(2,j,k)
+                if (un.ge.-0.01_mytype) then
+                   phi(1,j,k,:) = phi(2,j,k,:)
+                else
+                   phi(1,j,k,:) = zero
+                endif
+             enddo
+          enddo
+       endif
     endif
 
     !xn (+ex)
@@ -282,9 +302,6 @@ contains
              bxxn(j,k) = ux(nx,j,k)-cxn*(ux(nx,j,k)-ux(nx-1,j,k))
              bxyn(j,k) = uy(nx,j,k)-cxn*(uy(nx,j,k)-uy(nx-1,j,k))
              bxzn(j,k) = uz(nx,j,k)-cxn*(uz(nx,j,k)-uz(nx-1,j,k))
-             if (iscalar.eq.1) then
-                phi(nx,j,k,:) = phi(nx,j,k,:)-cxn*(phi(nx,j,k,:)-phi(nx-1,j,k,:))
-             endif
           enddo
        enddo
     elseif (iopen.eq.1) then
@@ -296,19 +313,42 @@ contains
                 bxxn(j,k) = ux(nx-1,j,k)
                 bxyn(j,k) = uy(nx-1,j,k)
                 bxzn(j,k) = uz(nx-1,j,k)
-                if (iscalar.eq.1) then
-                   phi(nx,j,k,:) = phi(nx-1,j,k,:)
-                endif
              else
                 bxxn(j,k) = zero
                 bxyn(j,k) = zero
                 bxzn(j,k) = zero
-                if (iscalar.eq.1) then
-                   phi(nx,j,k,:) = zero
-                endif
              endif
           enddo
        enddo
+    endif
+    if (iscalar.eq.1) then
+       if (iopenS.eq.0) then
+          !convective outflow using parabolic profile
+          do k = 1, xsize(3)
+             z = (k+xstart(3)-2)*dz-zlz/two
+             do j = 1, xsize(2)
+                if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+                if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+                x = xlx/two
+                r = sqrt(x*x+z*z)
+                un = three*(one-four*y*y/yly/yly)/yly/r/sixteen*x/r
+                cxn = un*gdt(itr)*udx
+                phi(nx,j,k,:) = phi(nx,j,k,:)-cxn*(phi(nx,j,k,:)-phi(nx-1,j,k,:))
+             enddo
+          enddo
+       elseif (iopenS.eq.1) then
+          !open boundary: zero-gradient + reverse flow (inflow scalar set to 0)
+          do k = 1, xsize(3)
+             do j = 1, xsize(2)
+                un = ux(nx-1,j,k)
+                if (un.ge.-0.01_mytype) then
+                   phi(nx,j,k,:) = phi(nx-1,j,k,:)
+                else
+                   phi(nx,j,k,:) = zero
+                endif
+             enddo
+          enddo
+       endif
     endif
 
     !z1 (-ez)
@@ -370,6 +410,37 @@ contains
           enddo
        endif
     endif
+    if (iscalar.eq.1) then
+       if (xstart(3).eq.1) then
+          if (iopenS.eq.0) then
+             !convective outflow using parabolic profile
+             do j = 1, xsize(2)
+                if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+                if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+                do i = 1, xsize(1)
+                   x = (i+xstart(1)-2)*dx-xlx/two
+                   z = -zlz/two
+                   r = sqrt(x*x+z*z)
+                   un = three*(one-four*y*y/yly/yly)/yly/r/sixteen*z/r
+                   cz1 = un*gdt(itr)*udz
+                   phi(i,j,1,:) = phi(i,j,1,:)-cz1*(phi(i,j,2,:)-phi(i,j,1,:))
+                enddo
+             enddo
+          elseif (iopenS.eq.1) then
+             !open boundary: zero-gradient + reverse flow (inflow scalar set to 0)
+             do j = 1, xsize(2)
+                do i = 1, xsize(1)
+                   un = -uz(i,j,2)
+                   if (un.ge.-0.01_mytype) then
+                      phi(i,j,1,:) = phi(i,j,2,:)
+                   else
+                      phi(i,j,1,:) = zero
+                   endif
+                enddo
+             enddo
+          endif
+       endif
+    endif
 
     !zn (+ez)
     if (xend(3).eq.nz) then
@@ -428,6 +499,37 @@ contains
                 endif
              enddo
           enddo
+       endif
+    endif
+    if (iscalar.eq.1) then
+       if (xend(3).eq.nz) then
+          if (iopenS.eq.0) then
+             !convective outflow using parabolic profile
+             do j = 1, xsize(2)
+                if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+                if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
+                do i = 1, xsize(1)
+                   x = (i+xstart(1)-2)*dx-xlx/two
+                   z = zlz/two
+                   r = sqrt(x*x+z*z)
+                   un = three*(one-four*y*y/yly/yly)/yly/r/sixteen*z/r
+                   czn = un*gdt(itr)*udz
+                   phi(i,j,nz,:) = phi(i,j,nz,:)-czn*(phi(i,j,nz,:)-phi(i,j,nz-1,:))
+                enddo
+             enddo
+          elseif (iopenS.eq.1) then
+             !open boundary: zero-gradient + reverse flow (inflow scalar set to 0)
+             do j = 1, xsize(2)
+                do i = 1, xsize(1)
+                   un = uz(i,j,xsize(3)-1)
+                   if (un.ge.-0.01_mytype) then
+                      phi(i,j,nz,:) = phi(i,j,nz-1,:)
+                   else
+                      phi(i,j,nz,:) = zero
+                   endif
+                enddo
+             enddo
+          endif
        endif
     endif
 
@@ -536,18 +638,25 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1,uy1,uz1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
 
-    integer :: is
+    integer :: is, code, ierr
+    logical :: dir_exists
 
     ux1=zero; uy1=zero; uz1=zero
 
     if(iin.eq.4) then
+      inquire(file="initial/ux.bin", exist=dir_exists)
+      if (.not. dir_exists) then
+         if (nrank.eq.0) write(*,*) 'Error: initial data does not exist!'
+         call MPI_ABORT(MPI_COMM_WORLD,code,ierr); stop
+      endif
+
       !Read velocity field
-      if (nrank.eq.0) write(*,*) 'reading : ', './data/ux.bin'
-      call decomp_2d_read_one(1,ux1,'data','ux.bin',io_jet,reduce_prec=.false.)
-      if (nrank.eq.0) write(*,*) 'reading : ', './data/uy.bin'
-      call decomp_2d_read_one(1,uy1,'data','uy.bin',io_jet,reduce_prec=.false.)
-      if (nrank.eq.0) write(*,*) 'reading : ', './data/uz.bin'
-      call decomp_2d_read_one(1,uz1,'data','uz.bin',io_jet,reduce_prec=.false.)
+      if (nrank.eq.0) write(*,*) 'reading : ', './initial/ux.bin'
+      call decomp_2d_read_one(1, ux1, "initial", "ux.bin", io_jet, reduce_prec=.false.)
+      if (nrank.eq.0) write(*,*) 'reading : ', './initial/uy.bin'
+      call decomp_2d_read_one(1, uy1, "initial", "uy.bin", io_jet, reduce_prec=.false.)
+      if (nrank.eq.0) write(*,*) 'reading : ', './initial/uz.bin'
+      call decomp_2d_read_one(1, uz1, "initial", "uz.bin", io_jet, reduce_prec=.false.)
     endif
 
     if (iscalar.eq.1) then

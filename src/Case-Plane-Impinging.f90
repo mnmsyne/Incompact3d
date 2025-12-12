@@ -88,7 +88,7 @@ contains
           um = one-(two*r)**u2
           if (r.le.half) then
              byxn(i,k) = zero + (uxprime(i,k)-half)*um*inflow_noise
-             byyn(i,k) = -(u2+one)/u2*(one-(two*r)**u2)*(one-exp(-half*t*t)) + (uyprime(i,k)-half)*um*inflow_noise
+             byyn(i,k) = -(u2+one)/u2*(one-(two*r)**u2) + (uyprime(i,k)-half)*um*inflow_noise
              byzn(i,k) = zero + (uzprime(i,k)-half)*um*inflow_noise
           else
              byxn(i,k) = zero
@@ -335,18 +335,25 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1,uy1,uz1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
 
-    integer :: is
+    integer :: is, code, ierr
+    logical :: dir_exists
 
     ux1=zero; uy1=zero; uz1=zero
 
     if(iin.eq.4) then
+      inquire(file="initial/ux.bin", exist=dir_exists)
+      if (.not. dir_exists) then
+         if (nrank.eq.0) write(*,*) 'Error: initial data does not exist!'
+         call MPI_ABORT(MPI_COMM_WORLD,code,ierr); stop
+      endif
+
       !Read velocity field
-      if (nrank.eq.0) write(*,*) 'reading : ', './data/ux.bin'
-      call decomp_2d_read_one(1,ux1,'data','ux.bin',io_jet,reduce_prec=.false.)
-      if (nrank.eq.0) write(*,*) 'reading : ', './data/uy.bin'
-      call decomp_2d_read_one(1,uy1,'data','uy.bin',io_jet,reduce_prec=.false.)
-      if (nrank.eq.0) write(*,*) 'reading : ', './data/uz.bin'
-      call decomp_2d_read_one(1,uz1,'data','uz.bin',io_jet,reduce_prec=.false.)
+      if (nrank.eq.0) write(*,*) 'reading : ', './initial/ux.bin'
+      call decomp_2d_read_one(1, ux1, "initial", "ux.bin", io_jet, reduce_prec=.false.)
+      if (nrank.eq.0) write(*,*) 'reading : ', './initial/uy.bin'
+      call decomp_2d_read_one(1, uy1, "initial", "uy.bin", io_jet, reduce_prec=.false.)
+      if (nrank.eq.0) write(*,*) 'reading : ', './initial/uz.bin'
+      call decomp_2d_read_one(1, uz1, "initial", "uz.bin", io_jet, reduce_prec=.false.)
     endif
 
     if (iscalar.eq.1) then

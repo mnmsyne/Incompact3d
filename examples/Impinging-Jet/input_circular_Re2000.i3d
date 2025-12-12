@@ -16,7 +16,7 @@ nx = 465               ! X-direction nodes
 ny = 117               ! Y-direction nodes
 nz = 465               ! Z-direction nodes
 istret = 3             ! y mesh refinement (0:no, 1:center, 2:both sides, 3:bottom)
-beta = 0.8             ! Refinement parameter (beta)
+beta = 0.25            ! Refinement parameter (beta)
 
 ! Domain
 xlx = 12.              ! Lx (Size of the box in x-direction)
@@ -32,22 +32,23 @@ nclz1 = 2
 nclzn = 2
 
 ! Flow parameters
-iin = 1                ! Inflow conditions (1: classic, 2: turbinit)
+iin = 4                ! Inflow conditions (1: classic, 2: turbinit)
 re  = 2000.            ! nu=1/re (Kinematic Viscosity)
 u1  = 1                ! u1 (max velocity) (for inflow condition)
 u2  = 28.              ! u2 (min velocity) (for inflow condition)
 init_noise = 0.0       ! Turbulence intensity (1=100%) !! Initial condition
 inflow_noise = 0.05    ! Turbulence intensity (1=100%) !! Inflow condition
 iopen = 1
+iopenS = 1
 
 ! Time stepping
-dt = 0.001             ! Time step
+dt = 0.0005            ! Time step
 ifirst = 1             ! First iteration
 ilast = 100000         ! Last iteration
 
 ! Enable modelling tools
 ilesmod = 0            ! if 0 then DNS
-numscalar = 0          ! How many scalars?
+numscalar = 2          ! How many scalars?
 iibm = 0               ! Flag for immersed boundary method
 
 ! Enable io
@@ -126,7 +127,7 @@ iconserv = 0           ! Formulation SGS divergence (0: non conservative, 1: con
 !================
 &FringeMethod
 !================
-ifringe = 0            ! Fringe Method (0: Off, 1: On)
+ifringe = 1            ! Fringe Method (0: Off, 1: On)
 fringe_beta = 3.
 fringe_rm = 4.
 

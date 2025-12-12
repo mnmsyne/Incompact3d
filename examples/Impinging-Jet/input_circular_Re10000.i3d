@@ -32,13 +32,14 @@ nclz1 = 2
 nclzn = 2
 
 ! Flow parameters
-iin = 1                ! Inflow conditions (1: classic, 2: turbinit)
+iin = 4                ! Inflow conditions (1: classic, 2: turbinit)
 re  = 10000.           ! nu=1/re (Kinematic Viscosity)
 u1  = 1                ! u1 (max velocity) (for inflow condition)
 u2  = 28.              ! u2 (min velocity) (for inflow condition)
 init_noise = 0.0       ! Turbulence intensity (1=100%) !! Initial condition
-inflow_noise = 0.0     ! Turbulence intensity (1=100%) !! Inflow condition
+inflow_noise = 0.2     ! Turbulence intensity (1=100%) !! Inflow condition
 iopen = 1
+iopenS = 1
 
 ! Time stepping
 dt = 0.0002            ! Time step
@@ -47,7 +48,7 @@ ilast = 100000         ! Last iteration
 
 ! Enable modelling tools
 ilesmod = 0            ! if 0 then DNS
-numscalar = 0          ! How many scalars?
+numscalar = 2          ! How many scalars?
 iibm = 0               ! Flag for immersed boundary method
 
 ! Enable io
@@ -126,7 +127,7 @@ iconserv = 0           ! Formulation SGS divergence (0: non conservative, 1: con
 !================
 &FringeMethod
 !================
-ifringe = 0            ! Fringe Method (0: Off, 1: On)
+ifringe = 1            ! Fringe Method (0: Off, 1: On)
 fringe_beta = 3.
 fringe_rm = 4.
 

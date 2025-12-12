@@ -42,7 +42,7 @@ subroutine parameter(input_i3d)
   integer :: longueur ,impi,j, is, total, ierr
 
   NAMELIST /BasicParam/ p_row, p_col, nx, ny, nz, istret, beta, xlx, yly, zlz, &
-       itype, iin, re, u1, u2, init_noise, inflow_noise, iopen, &
+       itype, iin, re, u1, u2, init_noise, inflow_noise, iopen, iopenS, &
        dt, ifirst, ilast, &
        numscalar, iibm, ilmn, &
        ilesmod, iscalar, &
@@ -750,6 +750,7 @@ subroutine parameter_defaults()
   inflow_noise = zero
   iin = 0
   iopen = 0
+  iopenS = 0
   itimescheme = 4
   iimplicit = 0
   istret = 0
