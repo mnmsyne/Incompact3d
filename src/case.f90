@@ -29,6 +29,7 @@ module case
   use cavity
   use pipe
   use ptbl
+  use rbc
 
   use var, only : nzmsize
 
@@ -153,6 +154,10 @@ contains
     elseif (itype.eq.itype_walljet) then
 
        call init_walljet(ux1, uy1, uz1, phi1)
+
+    elseif (itype.eq.itype_rbc) then
+
+       call init_rbc(ux1, uy1, uz1, ep1, phi1)
 
     else
   
@@ -286,7 +291,11 @@ contains
     elseif (itype.eq.itype_walljet) then
 
        call boundary_conditions_walljet(ux, uy, uz, phi)
-       
+      
+    elseif (itype.eq.itype_rbc) then
+
+       call boundary_conditions_rbc(ux, uy, uz, phi)
+
     endif
 
   end subroutine boundary_conditions
@@ -476,6 +485,10 @@ contains
     elseif (itype.eq.itype_walljet) then
       
        call postprocess_walljet (ux, uy, uz, pp, phi, ep)
+
+    elseif (itype.eq.itype_rbc) then
+      
+       call postprocess_rbc (ux, uy, uz, pp, phi, ep)
 
     endif
 

@@ -321,7 +321,11 @@ subroutine parameter(input_i3d)
     xnu = one/re_cent ! viscosity based on Re_cent to keep same scaling as CFR
     !
     fcpg = two/yly * (re/re_cent)**2
-  end if
+  endif
+  if (itype==itype_rbc .and. iscalar==1) then
+     re = sqrt(u1/u2)
+     xnu = sqrt(u2/u1)
+  endif
 
   if (ilmn) then
      if (ivarcoeff) then
@@ -424,11 +428,17 @@ subroutine parameter(input_i3d)
         print *,'Cavity'  
      elseif (itype.eq.itype_ptbl) then
         print *,'Temporal turbulent boundary layer' 
+     elseif (itype.eq.itype_rbc) then
+        print *,'Rayleigh-Bénard convection' 
      else
         print *,'Unknown itype: ', itype
         stop
      endif
      print *,'==========================================================='
+     if (itype.eq.itype_rbc) then
+       write(*,"(' Rayleigh number Ra     : ',F17.3)") u1
+       write(*,"(' Prandtl number Pr      : ',F17.3)") u2
+     endif
      if (itype.eq.itype_channel) then
        if (.not.cpg) then
          write(*,*) 'Channel forcing with constant flow rate (CFR)'
@@ -784,7 +794,6 @@ subroutine parameter_defaults()
   smagcst=0.15
   maxdsmagcst=0.3
 
-  
   !! SVV stuff
   nu0nu=four
   cnu=0.44_mytype
@@ -859,6 +868,7 @@ subroutine parameter_defaults()
   iconcprec=0
   pdl=zero
   dsampling=3.0_mytype
+
   !! Turbine modelling
   iturbine=0
   rho_air=one

@@ -381,9 +381,6 @@ contains
                 bzx1(i,j) = ux(i,j,1)-cz1*(ux(i,j,2)-ux(i,j,1))
                 bzy1(i,j) = uy(i,j,1)-cz1*(uy(i,j,2)-uy(i,j,1))
                 bzz1(i,j) = uz(i,j,1)-cz1*(uz(i,j,2)-uz(i,j,1))
-                if (iscalar.eq.1) then
-                   phi(i,j,1,:) = phi(i,j,1,:)-cz1*(phi(i,j,2,:)-phi(i,j,1,:))
-                endif
              enddo
           enddo
        elseif (iopen.eq.1) then
@@ -395,16 +392,10 @@ contains
                    bzx1(i,j) = ux(i,j,2)
                    bzy1(i,j) = uy(i,j,2)
                    bzz1(i,j) = uz(i,j,2)
-                   if (iscalar.eq.1) then
-                      phi(i,j,1,:) = phi(i,j,2,:)
-                   endif
                 else
                    bzx1(i,j) = zero
                    bzy1(i,j) = zero
                    bzz1(i,j) = zero
-                   if (iscalar.eq.1) then
-                      phi(i,j,1,:) = zero
-                   endif
                 endif
              enddo
           enddo
@@ -472,9 +463,6 @@ contains
                 bzxn(i,j) = ux(i,j,nz)-czn*(ux(i,j,nz)-ux(i,j,nz-1))
                 bzyn(i,j) = uy(i,j,nz)-czn*(uy(i,j,nz)-uy(i,j,nz-1))
                 bzzn(i,j) = uz(i,j,nz)-czn*(uz(i,j,nz)-uz(i,j,nz-1))
-                if (iscalar.eq.1) then
-                   phi(i,j,nz,:) = phi(i,j,nz,:)-czn*(phi(i,j,nz,:)-phi(i,j,nz-1,:))
-                endif
              enddo
           enddo
        elseif (iopen.eq.1) then
@@ -486,16 +474,10 @@ contains
                    bzxn(i,j) = ux(i,j,xsize(3)-1)
                    bzyn(i,j) = uy(i,j,xsize(3)-1)
                    bzzn(i,j) = uz(i,j,xsize(3)-1)
-                   if (iscalar.eq.1) then
-                      phi(i,j,nz,:) = phi(i,j,nz-1,:)
-                   endif
                 else
                    bzxn(i,j) = zero
                    bzyn(i,j) = zero
                    bzzn(i,j) = zero
-                   if (iscalar.eq.1) then
-                      phi(i,j,nz,:) = zero
-                   endif
                 endif
              enddo
           enddo

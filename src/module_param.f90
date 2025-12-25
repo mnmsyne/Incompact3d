@@ -317,7 +317,8 @@ module param
        itype_sandbox = 12, &
        itype_cavity = 13, &
        itype_pipe = 14, &
-       itype_ptbl = 15
+       itype_ptbl = 15, &
+       itype_rbc = 100
 
   integer :: cont_phi,itr,itime,itest,iprocessing
   integer :: ifft,istret,iforc_entree,iturb
