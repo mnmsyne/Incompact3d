@@ -30,8 +30,8 @@ contains
 
     implicit none
 
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1, ep1
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
+    real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1, ep1
+    real(mytype), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
 
     integer :: i, j, k, ii, is, code
     real(mytype) :: x, y, z, r, um
@@ -40,12 +40,6 @@ contains
     real(mytype) :: Delta_in
     real(mytype), allocatable, dimension(:,:,:) :: ux_coarse, uy_coarse, uz_coarse
     real(mytype), allocatable, dimension(:) :: x_coarse, y_coarse, z_coarse
-
-   !  zeromach=one
-   !  do while ((one + zeromach / two) .gt. one)
-   !     zeromach = zeromach/two
-   !  end do
-   !  zeromach = ten*zeromach
     
     ux1 = zero; uy1 = zero; uz1 = zero
 

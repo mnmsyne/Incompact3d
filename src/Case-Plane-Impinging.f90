@@ -28,7 +28,7 @@ contains
 
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-    integer :: is, isT
+    integer :: is
     real(mytype) :: qflux
 
     !Top boundary (yn)
@@ -51,9 +51,7 @@ contains
     !Bottom boundary (y1)
     if (iscalar.eq.1) then
        if (xstart(2).eq.1) then
-          isT = 1; qflux = one-exp(-half*t*t)
-          call scalar_neumann (phi,isT,qflux)
-          do is = 2, numscalar
+          do is = 1, numscalar
              phi(:,xstart(2),:,is) = one-exp(-half*t*t)
           enddo
        endif
@@ -130,11 +128,11 @@ contains
           ux1mean = ux1mean + ux(2,j,k)
        enddo
     enddo
-    ux1mean = ux1mean/xsize(2)/xsize(3)
+    ux1mean = ux1mean/real(xsize(2)*xsize(3),mytype)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1max,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1min,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1mean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    ux1mean = ux1mean/nproc
+    ux1mean = ux1mean/real(nproc,mytype)
     if (iopen.eq.0) then
        !convective outflow using parabolic profile
        do k = 1, xsize(3)
@@ -183,11 +181,11 @@ contains
           uxnmean = uxnmean + ux(nx-1,j,k)
        enddo
     enddo
-    uxnmean = uxnmean/xsize(2)/xsize(3)
+    uxnmean = uxnmean/real(xsize(2)*xsize(3),mytype)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    uxnmean = uxnmean/nproc
+    uxnmean = uxnmean/real(nproc,mytype)
     if (iopen.eq.0) then
        !convective outflow using parabolic profile
        do k = 1, xsize(3)
@@ -240,47 +238,6 @@ contains
 
     return
   end subroutine outflow
-  !########################################################################
-
-  subroutine scalar_neumann (phi,is,qflux)
-    USE param
-    USE variables
- 
-    implicit none
-
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-    integer,intent(in) :: is
-    real(mytype),intent(in):: qflux
-
-    integer :: i, k
-    real(mytype) :: dy0, dy1, a0, a1, a2
-
-    !Dairay et al., Int. J. Heat Fluid Flow (2014) 
-    if (xstart(2).eq.1) then
-       if (istret.eq.0) then
-          dy0 = dy
-          do k = 1, xsize(3)
-             do i = 1, xsize(1)
-                !T1 = (18*T2 - 9*T3 + 2*T4 + 6*dy0*qflux)/11
-                phi(i,1,k,is) = (eighteen*phi(i,2,k,is)-nine*phi(i,3,k,is)+two*phi(i,4,k,is)+six*dy0*qflux)/eleven
-             enddo
-          enddo
-       else
-          dy0 = yp(xstart(2)+1)-yp(xstart(2))
-          dy1 = yp(xstart(2)+2)-yp(xstart(2)+1)
-          a0 = -(two*dy0 + dy1)/dy0/(dy0 + dy1)
-          a1 =  (dy0+dy1)/dy0/dy1
-          a2 = - dy0/dy1/(dy0 + dy1)
-          do k = 1, xsize(3)
-             do i = 1, xsize(1)
-                !T1 = (-qflux - a1*T2 - a2*T3)/a0
-                phi(i,1,k,is) = -(qflux+a1*phi(i,2,k,is)+a2*phi(i,3,k,is))/a0
-             enddo
-          enddo
-       endif
-    endif
-
-  end subroutine scalar_neumann
   !########################################################################
 
   subroutine momentum_forcing_planeimpinging(dux1,duy1,duz1,ux1,uy1,uz1)
@@ -474,43 +431,6 @@ contains
                  - tg1(:,:,:) * tc1(:,:,:) &
                  - th1(:,:,:) * tf1(:,:,:)
     call write_field(di1, ".", "critq", num, flush = .true.) ! Reusing temporary array, force flush
-
-    !Nusselt number
-    numax01 = -1609._mytype; numax02 = -1609._mytype;
-    if (iscalar.eq.1) then
-       nu01 = zero; nu02 = zero
-       if (xstart(2).eq.1) then
-          do k = 1, xsize(3)
-             do i = 1, xsize(1)
-                if (abs(phi1(i,1,k,1)).gt.1.0e-12_mytype) nu01(i,1,k) = one/phi1(i,1,k,1)
-                if (nu01(i,1,k).gt.numax01) numax01 = nu01(i,1,k)
-
-                if (numscalar.ge.2) then
-                   if (istret.eq.0) then
-                      dy0 = dy
-                      nu02(i,1,k) = -(-eleven*phi1(i,1,k,2)+eighteen*phi1(i,2,k,2)-nine*phi1(i,3,k,2)+two*phi1(i,4,k,2))/six/dy0
-                   else
-                      dy0 = yp(xstart(2)+1)-yp(xstart(2))
-                      dy1 = yp(xstart(2)+2)-yp(xstart(2)+1)
-                      nu02(i,1,k) = -(-phi1(i,1,k,2)*(two*dy0+dy1)/dy0/(dy0+dy1) &
-                                    + phi1(i,2,k,2)*(dy0+dy1)/dy0/dy1 - phi1(i,3,k,2)*dy0/dy1/(dy0+dy1))
-                   endif
-                   if (nu02(i,1,k).gt.numax02) numax02 = nu02(i,1,k)
-                endif
-             enddo
-          enddo
-       endif
-       
-       call write_field(nu01, ".", "nu01", num)
-       call MPI_ALLREDUCE(MPI_IN_PLACE,numax01,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-       if (nrank==0) write(*,*) "Nusselt number nu01 max=", real(numax01,4)
-
-       if (numscalar.ge.2) then
-          call write_field(nu02, ".", "nu02", num)
-          call MPI_ALLREDUCE(MPI_IN_PLACE,numax02,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-          if (nrank==0) write(*,*) "Nusselt number nu02 max=", real(numax02,4)
-       endif
-    endif
 
   end subroutine visu_planeimpinging
   !########################################################################

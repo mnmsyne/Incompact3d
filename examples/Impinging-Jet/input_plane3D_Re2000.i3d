@@ -104,10 +104,8 @@ initstat = 500000      ! Time steps after which statistics are collected
 !================
 &ScalarParam
 !================
-Sc(1) = 0.7            ! Schmidt number
+Sc(1) = 1.0            ! Schmidt number
 cp(1) = 1.0            ! initial concentrations
-Sc(2) = 0.7            ! Schmidt number
-cp(2) = 1.0            ! initial concentrations
 
 /End
 

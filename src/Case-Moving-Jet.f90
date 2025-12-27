@@ -141,11 +141,11 @@ contains
           ux1mean = ux1mean + ux(2,j,k)
        enddo
     enddo
-    ux1mean = ux1mean/xsize(2)/xsize(3)
+    ux1mean = ux1mean/real(xsize(2)*xsize(3),mytype)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1max,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1min,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1mean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    ux1mean = ux1mean/nproc
+    ux1mean = ux1mean/real(nproc,mytype)
     if (iopen.eq.0) then
        !convective outflow using parabolic profile
        do k = 1, xsize(3)
@@ -194,11 +194,11 @@ contains
           uxnmean = uxnmean + ux(nx-1,j,k)
        enddo
     enddo
-    uxnmean = uxnmean/xsize(2)/xsize(3)
+    uxnmean = uxnmean/real(xsize(2)*xsize(3),mytype)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    uxnmean = uxnmean/nproc
+    uxnmean = uxnmean/real(nproc,mytype)
     if (iopen.eq.0) then
        !convective outflow using parabolic profile
        do k = 1, xsize(3)

@@ -4,7 +4,7 @@
 &BasicParam
 !===================
 
-! Flow type (circular impinging jet)
+! Flow type (circular impinging jet) Dairay2015
 itype = 74
 
 ! Domain decomposition
@@ -42,13 +42,13 @@ iopen = 1
 iopenS = 1
 
 ! Time stepping
-dt = 0.0002            ! Time step
+dt = 0.0001            ! Time step
 ifirst = 1             ! First iteration
 ilast = 100000         ! Last iteration
 
 ! Enable modelling tools
 ilesmod = 0            ! if 0 then DNS
-numscalar = 2          ! How many scalars?
+numscalar = 0          ! How many scalars?
 iibm = 0               ! Flag for immersed boundary method
 
 ! Enable io
@@ -107,8 +107,6 @@ initstat = 500000      ! Time steps after which statistics are collected
 !================
 Sc(1) = 1.0            ! Schmidt number
 cp(1) = 1.0            ! initial concentrations
-Sc(2) = 1.0            ! Schmidt number
-cp(2) = 1.0            ! initial concentrations
 
 /End
 

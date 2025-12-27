@@ -207,11 +207,11 @@ contains
           ux1mean = ux1mean + ux(2,j,k)
        enddo
     enddo
-    ux1mean = ux1mean/xsize(2)/xsize(3)
+    ux1mean = ux1mean/real(xsize(2)*xsize(3),mytype)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1max,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1min,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1mean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    ux1mean = ux1mean/nproc
+    ux1mean = ux1mean/real(nproc,mytype)
     if (iopen.eq.0) then
        !convective outflow using parabolic profile
        do k = 1, xsize(3)
@@ -283,11 +283,11 @@ contains
           uxnmean = uxnmean + ux(nx-1,j,k)
        enddo
     enddo
-    uxnmean = uxnmean/xsize(2)/xsize(3)
+    uxnmean = uxnmean/real(xsize(2)*xsize(3),mytype)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    uxnmean = uxnmean/nproc
+    uxnmean = uxnmean/real(nproc,mytype)
     if (iopen.eq.0) then
        !convective outflow using parabolic profile
        do k = 1, xsize(3)
@@ -361,11 +361,11 @@ contains
           enddo
        enddo
     endif
-    uz1mean = uz1mean/xsize(1)/xsize(2)
+    uz1mean = uz1mean/real(xsize(1)*xsize(2),mytype)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uz1max,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uz1min,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uz1mean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    uz1mean = uz1mean/nproc
+    uz1mean = uz1mean/real(nproc,mytype)
     if (xstart(3).eq.1) then
        if (iopen.eq.0) then
           !convective outflow using parabolic profile
@@ -443,11 +443,11 @@ contains
           enddo
        enddo
     endif
-    uznmean = uznmean/xsize(1)/xsize(2)
+    uznmean = uznmean/real(xsize(1)*xsize(2),mytype)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uznmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uznmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uznmean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    uznmean = uznmean/nproc
+    uznmean = uznmean/real(nproc,mytype)
     if (xend(3).eq.nz) then
        if (iopen.eq.0) then
           !convective outflow using parabolic profile
@@ -460,9 +460,9 @@ contains
                 r = sqrt(x*x+z*z)
                 un = three*(one-four*y*y/yly/yly)/yly/r/sixteen*z/r
                 czn = un*gdt(itr)*udz
-                bzxn(i,j) = ux(i,j,nz)-czn*(ux(i,j,nz)-ux(i,j,nz-1))
-                bzyn(i,j) = uy(i,j,nz)-czn*(uy(i,j,nz)-uy(i,j,nz-1))
-                bzzn(i,j) = uz(i,j,nz)-czn*(uz(i,j,nz)-uz(i,j,nz-1))
+                bzxn(i,j) = ux(i,j,xsize(3))-czn*(ux(i,j,xsize(3))-ux(i,j,xsize(3)-1))
+                bzyn(i,j) = uy(i,j,xsize(3))-czn*(uy(i,j,xsize(3))-uy(i,j,xsize(3)-1))
+                bzzn(i,j) = uz(i,j,xsize(3))-czn*(uz(i,j,xsize(3))-uz(i,j,xsize(3)-1))
              enddo
           enddo
        elseif (iopen.eq.1) then
@@ -496,7 +496,7 @@ contains
                    r = sqrt(x*x+z*z)
                    un = three*(one-four*y*y/yly/yly)/yly/r/sixteen*z/r
                    czn = un*gdt(itr)*udz
-                   phi(i,j,nz,:) = phi(i,j,nz,:)-czn*(phi(i,j,nz,:)-phi(i,j,nz-1,:))
+                   phi(i,j,xsize(3),:) = phi(i,j,xsize(3),:)-czn*(phi(i,j,xsize(3),:)-phi(i,j,xsize(3)-1,:))
                 enddo
              enddo
           elseif (iopenS.eq.1) then
@@ -505,9 +505,9 @@ contains
                 do i = 1, xsize(1)
                    un = uz(i,j,xsize(3)-1)
                    if (un.ge.-0.01_mytype) then
-                      phi(i,j,nz,:) = phi(i,j,nz-1,:)
+                      phi(i,j,xsize(3),:) = phi(i,j,xsize(3)-1,:)
                    else
-                      phi(i,j,nz,:) = zero
+                      phi(i,j,xsize(3),:) = zero
                    endif
                 enddo
              enddo
@@ -516,9 +516,9 @@ contains
     endif
 
     if (nrank==0 .and. (mod(itime, ilist)==0 .or. itime==ifirst .or. itime==ilast)) then
-       if (iopen.eq.0) then
+       if (iopen==0 .and. iopenS==0) then
           write(*,*) "Convective outflow BCs: using parabolic profile"
-       elseif (iopen.eq.1) then
+       elseif (iopen==1 .and. iopenS==1) then
           write(*,*) "Open boundary BCs: zero-gradient + reverse flow"
        endif
        write(*,*) "Outflow velocity ux1 min max mean=",real(ux1min,4),real(ux1max,4),real(ux1mean,4)
