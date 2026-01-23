@@ -304,17 +304,25 @@ module param
        itype_hill = 4, &
        itype_cyl = 5, &
        itype_mixlayer = 7, &
+       itype_tempjet = 71, &
+       itype_planejet = 72, &
+       itype_walljet = 721, &
+       itype_swirljet = 73, &
+       itype_impingingjet = 74, &
+       itype_planeimpinging = 741, &
+       itype_movingjet = 745, &
        itype_tbl = 9, &
        itype_abl = 10, &
        itype_uniform = 11, &
        itype_sandbox = 12, &
        itype_cavity = 13, &
        itype_pipe = 14, &
-       itype_ptbl = 15
+       itype_ptbl = 15, &
+       itype_rbc = 100
 
   integer :: cont_phi,itr,itime,itest,iprocessing
   integer :: ifft,istret,iforc_entree,iturb
-  integer :: iin,itimescheme,iimplicit,ifirst,ilast,iles
+  integer :: iin,itimescheme,iimplicit,ifirst,ilast,iles,iopen,iopenS
   integer :: ntime ! How many (sub)timestpeps do we need to store?
   integer :: icheckpoint,irestart,idebmod,ioutput,imodulo2,idemarre,icommence,irecord
   integer :: ioutflow, ninflows, ntimesteps
@@ -328,6 +336,7 @@ module param
   real(mytype) :: wrotation,ro
   real(mytype) :: dens1, dens2
   real(mytype) :: C_filter
+  real(mytype) :: inflow_offset, theta_jet
   character(len=512) :: inflowpath
   logical :: validation_restart
   logical :: mhd_active,particle_active
@@ -379,6 +388,10 @@ module param
   integer :: APG
   real(mytype) :: APG_DpDX,APG_Beta
 
+  !Fringe Method
+  integer :: ifringe
+  real(mytype) :: fringe_beta, fringe_rm
+
   !Probe for Spectra
   integer :: Pro_Spectra
   real(mytype) :: X_Pro_Spectra,Z_Pro_Spectra
@@ -386,6 +399,10 @@ module param
   !! Gravity field (vector components)
   real(mytype) :: gravx, gravy, gravz
 
+  !! Oscillation
+  integer :: ioscl, oscl_time, dir_oscl
+  real(mytype) :: A_oscl, freq_oscl
+  
   !! LMN
   logical :: ilmn, ilmn_bound, ilmn_solve_temp
   real(mytype) :: pressure0, prandtl, Fr
@@ -538,8 +555,6 @@ module param
   real(mytype),parameter :: twopi=two*acos(-one)
 #endif
 
-  logical :: periodic_bc(3)
-  
 end module param
 !############################################################################
 !############################################################################

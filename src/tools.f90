@@ -68,7 +68,7 @@ contains
 
         write(*,*) 'Phi'//char(48+is)//' min max=', real(phimin1,4), real(phimax1,4)
 
-        if (abs(phimax1) > 100._mytype) then !if phi control turned off
+        if ((abs(phimax1)>100._mytype).or.(abs(phimin1)>100._mytype)) then !if phi control turned off
            write(*,*) 'Scalar diverged! SIMULATION IS STOPPED!'
            call MPI_ABORT(MPI_COMM_WORLD,code,ierror); stop
         endif
@@ -1023,7 +1023,7 @@ contains
     end if
 
     if (nrank == exe_rank) then
-       oldname_ext = trim(gen_iodir_name(oldname, io_restart))
+       oldname_ext = gen_iodir_name(oldname, io_restart)
        inquire(file=oldname_ext, exist=exist)
        if (exist) then
           cmd = "mv "//oldname_ext//" "//newname
@@ -1124,7 +1124,7 @@ contains
     if (nrank == exe_rank) then
        success = .true.
 
-       testname_ext = trim(gen_iodir_name(testname, io_restart))
+       testname_ext = gen_iodir_name(testname, io_restart)
        
        inquire(file=refname, size=refsize, exist=refexist)
        inquire(file=testname_ext, size=testsize, exist=testexist)
