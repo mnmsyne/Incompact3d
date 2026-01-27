@@ -151,7 +151,23 @@ contains
     real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
     real(mytype), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
 
-    return
+    integer :: is
+
+    if (iscalar.ne.0) then
+        ! y = 0
+        if (nclyS1==2 .and. xstart(2)==1) then
+            do is = 1, numscalar
+                phi(:,1,:,is) = one
+            enddo
+        endif
+        ! y = Ly
+        if (nclySn==2 .and. xend(2)==ny) then
+            do is = 1, numscalar
+                phi(:,xsize(2),:,is) = zero
+            enddo
+        endif
+    endif
+
   end subroutine boundary_conditions_rbc
   !########################################################################
 

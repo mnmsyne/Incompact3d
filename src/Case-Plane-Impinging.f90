@@ -15,8 +15,12 @@ module planeimpinging
   character(len=*), parameter :: io_jet = "io-jet"
 
   PRIVATE !! All functions/subroutines private by default
-  PUBLIC :: boundary_conditions_planeimpinging, momentum_forcing_planeimpinging, init_planeimpinging, &
-            postprocess_planeimpinging, visu_planeimpinging, visu_planeimpinging_init
+  PUBLIC :: boundary_conditions_planeimpinging, &
+            momentum_forcing_planeimpinging, &
+            init_planeimpinging, &
+            postprocess_planeimpinging, &
+            visu_planeimpinging, &
+            visu_planeimpinging_init
 
 contains
 
@@ -26,77 +30,97 @@ contains
 
     implicit none
 
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-    integer :: is
-    real(mytype) :: qflux
+    real(mytype), dimension(xsize(1), xsize(2), xsize(3)) :: ux, uy, uz
+    real(mytype), dimension(xsize(1), xsize(2), xsize(3), numscalar) :: phi
 
     !Top boundary (yn)
-    call inflow (ux, uy, uz)
+    call inflow (ux, uy, uz, phi)
 
-    !Side boundary (x1,xn,z1,zn)
+    !Side boundary (x1, xn, z1, zn)
     call outflow (ux, uy, uz, phi)
 
-    !Scalar boundary conditions
-    !Top boundary (yn)
-    if (iscalar.eq.1) then
-       if (xend(2).eq.ny) then
-          !set all scalar components at top to 0
-          do is = 1, numscalar
-             phi(:,xsize(2),:,is) = zero
-          enddo
-       endif
-    endif
-
-    !Bottom boundary (y1)
-    if (iscalar.eq.1) then
-       if (xstart(2).eq.1) then
-          do is = 1, numscalar
-             phi(:,xstart(2),:,is) = one-exp(-half*t*t)
-          enddo
-       endif
-    endif
-
-    return
   end subroutine boundary_conditions_planeimpinging
   !########################################################################
 
-  subroutine inflow (ux, uy, uz)
+  subroutine inflow (ux, uy, uz, phi)
     USE param
     USE variables
 
     implicit none
 
-    real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
+    real(mytype), dimension(xsize(1), xsize(2), xsize(3)) :: ux, uy, uz
+    real(mytype), dimension(xsize(1), xsize(2), xsize(3), numscalar) :: phi
 
-    integer :: i, k
-    real(mytype) :: x, z, r, um
-    real(mytype), dimension(xsize(1),xsize(3)) :: uxprime, uyprime, uzprime
+    integer :: i, k, is
+    real(mytype) :: x, r, um, delta, eta, trans_width, weight
+    real(mytype), dimension(xsize(1), xsize(3)) :: uxprime, uyprime, uzprime
 
-    call random_number(uxprime)
-    call random_number(uyprime)
-    call random_number(uzprime)
+    uxprime = zero; uyprime = zero; uzprime = zero
+    if (iin.ne.0) then
+       call random_number(uxprime)
+       call random_number(uyprime)
+       call random_number(uzprime)
+    endif
+
+    trans_width = two*dx
+    delta = theta_jet
 
     !Top boundary
-    do k = 1,xsize(3)
-       z = (k+xstart(3)-2)*dz-zlz/two
-       do i = 1,xsize(1)
-          x = (i+xstart(1)-2)*dx-xlx/two
+    do k = 1, xsize(3)
+       do i = 1, xsize(1)
+          x = real(i+xstart(1)-2, mytype)*dx - xlx/two
           r = sqrt(x*x)
-          um = one-(two*r)**u2
-          if (r.le.half) then
-             byxn(i,k) = zero + (uxprime(i,k)-half)*um*inflow_noise
-             byyn(i,k) = -(u2+one)/u2*(one-(two*r)**u2) + (uyprime(i,k)-half)*um*inflow_noise
-             byzn(i,k) = zero + (uzprime(i,k)-half)*um*inflow_noise
-          else
-             byxn(i,k) = zero
-             byyn(i,k) = zero
-             byzn(i,k) = zero
+          if (iin.ne.1) then !laminar boundary layer
+             if (r.le.(half - delta)) then
+                byxn(i,k) = zero
+                byyn(i,k) = -one
+                byzn(i,k) = zero
+             elseif (r.ge.half) then
+                byxn(i,k) = zero
+                byyn(i,k) = zero
+                byzn(i,k) = zero
+             else
+                eta = (half - r)/delta
+                byxn(i,k) = zero
+                byyn(i,k) = -(two*eta - two*eta**3 + eta**4)
+                byzn(i,k) = zero
+             endif
+          else !polynomial profile + noise
+             um = one - (two*r)**u2
+             if (r.le.half) then
+                byxn(i,k) = zero + (uxprime(i,k) - half)*um*inflow_noise
+                byyn(i,k) = -(u2 + one)/u2*(one - (two*r)**u2) + (uyprime(i,k) - half)*um*inflow_noise
+                byzn(i,k) = zero + (uzprime(i,k) - half)*um*inflow_noise
+             else
+                byxn(i,k) = zero
+                byyn(i,k) = zero
+                byzn(i,k) = zero
+             endif
           endif
        enddo
     enddo
 
-    return
+    if (iscalar.eq.1) then
+       if (xend(2).eq.ny) then
+          do is = 1, numscalar
+             do k = 1, xsize(3)
+                do i = 1, xsize(1)
+                   x = real(i+xstart(1)-2, mytype)*dx - xlx/two
+                   r = sqrt(x*x)
+                   if (r.le.(half - trans_width)) then
+                      weight = zero
+                   elseif (r.ge.(half + trans_width)) then
+                      weight = one
+                   else
+                      weight = half*(one + (r - half)/trans_width + sin(PI*(r - half)/trans_width)/PI)
+                   endif
+                   phi(i,xsize(2),k,is) = weight*phi(i,xsize(2)-1,k,is) + (one - weight)*cp(is)
+                enddo
+             enddo
+          enddo
+       endif
+    endif
+
   end subroutine inflow
   !########################################################################
 
@@ -128,16 +152,15 @@ contains
           ux1mean = ux1mean + ux(2,j,k)
        enddo
     enddo
-    ux1mean = ux1mean/real(xsize(2)*xsize(3),mytype)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1max,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1min,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,ux1mean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    ux1mean = ux1mean/real(nproc,mytype)
+    ux1mean = ux1mean/real(ny*nz, mytype)
     if (iopen.eq.0) then
        !convective outflow using parabolic profile
        do k = 1, xsize(3)
           do j = 1, xsize(2)
-             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+             if (istret.eq.0) y=real(j+xstart(2)-2, mytype)*dy-yly/two
              if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
              un = -three/four*(one-four*y*y/yly/yly)/yly
              cx1 = un*gdt(itr)*udx
@@ -154,7 +177,7 @@ contains
        do k = 1, xsize(3)
           do j = 1, xsize(2)
              un = -ux(2,j,k)
-             if (un.ge.zero) then
+             if (un.ge.-0.01_mytype) then
                 bxx1(j,k) = ux(2,j,k)
                 bxy1(j,k) = uy(2,j,k)
                 bxz1(j,k) = uz(2,j,k)
@@ -181,16 +204,15 @@ contains
           uxnmean = uxnmean + ux(nx-1,j,k)
        enddo
     enddo
-    uxnmean = uxnmean/real(xsize(2)*xsize(3),mytype)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,ierr)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxnmean,1,real_type,MPI_SUM,MPI_COMM_WORLD,ierr)
-    uxnmean = uxnmean/real(nproc,mytype)
+    uxnmean = uxnmean/real(ny*nz, mytype)
     if (iopen.eq.0) then
        !convective outflow using parabolic profile
        do k = 1, xsize(3)
           do j = 1, xsize(2)
-             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+             if (istret.eq.0) y=real(j+xstart(2)-2, mytype)*dy-yly/two
              if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
              un = three/four*(one-four*y*y/yly/yly)/yly
              cxn = un*gdt(itr)*udx
@@ -207,7 +229,7 @@ contains
        do k = 1, xsize(3)
           do j = 1, xsize(2)
              un = ux(nx-1,j,k)
-             if (un.ge.zero) then
+             if (un.ge.-0.01_mytype) then
                 bxxn(j,k) = ux(nx-1,j,k)
                 bxyn(j,k) = uy(nx-1,j,k)
                 bxzn(j,k) = uz(nx-1,j,k)
@@ -255,7 +277,7 @@ contains
     if (ifringe.ne.0) then
        do k = 1,xsize(3)
           do j = 1,xsize(2)
-             if (istret.eq.0) y=(j+xstart(2)-2)*dy-yly/two
+             if (istret.eq.0) y=real(j+xstart(2)-2, mytype)*dy-yly/two
              if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/two
              do i = 1,xsize(1)
                 x = (i+xstart(1)-2)*dx-xlx/two

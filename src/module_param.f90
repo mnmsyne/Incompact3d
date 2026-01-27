@@ -399,9 +399,8 @@ module param
   !! Gravity field (vector components)
   real(mytype) :: gravx, gravy, gravz
 
-  !! Oscillation
-  integer :: ioscl, oscl_time, dir_oscl
-  real(mytype) :: A_oscl, freq_oscl
+  !! Motion
+  integer :: iMotion
   
   !! LMN
   logical :: ilmn, ilmn_bound, ilmn_solve_temp

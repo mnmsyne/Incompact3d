@@ -29,20 +29,7 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux, uy, uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
 
-    integer :: i, j, k, is
-
-    !Bottom boundary (y1)
-    if (iscalar.eq.1) then
-       if (xstart(2).eq.1) then
-          do is = 1, numscalar
-             do k = 1, xsize(3)
-                do i = 1, xsize(1)
-                   phi(i,xstart(2),k,is) = phi(i,xstart(2)+1,k,is)
-                enddo
-             enddo
-          enddo
-       endif
-    endif
+    integer :: i, j, k
 
     !Top boundary (yn)
     call inflow (ux, uy, uz, phi)

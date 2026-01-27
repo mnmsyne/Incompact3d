@@ -285,21 +285,6 @@ contains
 
     real(mytype), intent(in), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1
     real(mytype), dimension(xsize(1), xsize(2), xsize(3), ntime) :: dux1, duy1, duz1
-    
-    if (ioscl==1 .and. itime >= oscl_time) then
-       if (nrank==0 .and. (mod(itime, ilist) == 0)) then
-          write(*,*) 'Oscillation with amplitude ', A_oscl
-          write(*,*) 'Oscillation with frequency ', freq_oscl
-          write(*,*) 'Oscillation force: ', A_oscl*sin(two*pi*freq_oscl*t)
-       endif
-       if (dir_oscl.eq.1) then
-          dux1(:,:,:,1) = dux1(:,:,:,1) + A_oscl*sin(two*pi*freq_oscl*t)
-       elseif (dir_oscl.eq.2) then
-          duy1(:,:,:,1) = duy1(:,:,:,1) + A_oscl*sin(two*pi*freq_oscl*t)
-       elseif (dir_oscl.eq.3) then
-          duz1(:,:,:,1) = duz1(:,:,:,1) + A_oscl*sin(two*pi*freq_oscl*t)
-       endif
-    endif
 
   end subroutine momentum_forcing_walljet
 

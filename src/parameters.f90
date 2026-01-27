@@ -67,10 +67,10 @@ subroutine parameter(input_i3d)
   NAMELIST /ThetaDotModel/ jtheta_dot,jthickness,Method_FT,K_theta,H_12
   NAMELIST /BlowingModel/ Blowing,A_Blowing,Xst_Blowing,Xen_Blowing,Range_Smooth  
   NAMELIST /AdversePresGrad/ APG,APG_DpDX,APG_Beta
+  NAMELIST /Motion/ iMotion
   NAMELIST /FringeMethod/ ifringe, fringe_beta, fringe_rm
   NAMELIST /ProbeSpectra/ Pro_Spectra,X_Pro_Spectra,Z_Pro_Spectra
   NAMELIST /Tripping/ itrip,A_tr,xs_tr_tbl,ys_tr_tbl,ts_tr_tbl,x0_tr_tbl
-  NAMELIST /Oscillation/ ioscl, dir_oscl, A_oscl, freq_oscl, oscl_time
   NAMELIST /ibmstuff/ cex,cey,cez,ra,rai,rao,nobjmax,nraf,nvol,iforces, &
        npif, izap, ianal, imove, thickness, chord, omega ,ubcx,ubcy,ubcz,rads, c_air
   NAMELIST /LMN/ dens1, dens2, prandtl, ilmn_bound, ivarcoeff, ilmn_solve_temp, &
@@ -254,13 +254,17 @@ subroutine parameter(input_i3d)
   end if
   
   if (itype==itype_impingingjet .or. & 
-      itype==itype_planeimpinging .or. &
-      itype==itype_movingjet) then
+      itype==itype_planeimpinging) then
+     read(10, nml=FringeMethod); rewind(10)
+  endif
+
+  if (itype.eq.itype_movingjet) then
+     read(10, nml=Motion); rewind(10)
      read(10, nml=FringeMethod); rewind(10)
   endif
 
   if (itype.eq.itype_walljet) then
-     read(10, nml=Oscillation); rewind(10)
+     read(10, nml=Motion); rewind(10)
   endif
   
   if (itype.eq.itype_tbl) then
@@ -574,14 +578,10 @@ subroutine parameter(input_i3d)
       endif
 
       write(*,*) '==========================================================='
-      if (ioscl==0) then 
-         write(*,"(' Oscillation               : ',A10)") "Off"
-      elseif (ioscl==1) then
-         write(*,"(' Oscillation               : ',A10)") "On"
-         write(*,"(' Oscillation Direction     : ',I17)") dir_oscl
-         write(*,"(' Oscillation Amplitude     : ',F12.6)") A_oscl
-         write(*,"(' Oscillation Frequency     : ',F12.6)") freq_oscl
-         write(*,"(' Oscillation Start Time    : ',I17)") oscl_time
+      if (iMotion==0) then 
+         write(*,"(' Motion                    : ',A10)") "Off"
+      elseif (iMotion==1) then
+         write(*,"(' Motion                    : ',A10)") "On"
       endif
       
      write(*,*) '==========================================================='
