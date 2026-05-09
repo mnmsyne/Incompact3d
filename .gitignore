@@ -1,37 +1,50 @@
-*.xcuserstate
-*.xc*
-*.pbxproj
-*.out
+# Editor and local tooling
+.DS_Store
+.cproject
+.project
+.settings
+.vscode/
+.codex/
+.agents/
+*.swp
+*~
+.#*
+\#*\#
+TAGS
+
+# Build products
+build*
+incompact3d
+xcompact3d
 *.o
 *.mod
 *.smod
-*.xdmf
-.#*
-*.jpg
-*.pdf
-*.svg
-*.swp
-*~
-sauve*
-incompact3d
-xcompact3d
+*.out
+
+# Runtime output and generated data
 out/
 stats/
 planes/
 post/
-.DS_Store
-TAGS
-lint.txt
-\#*\#
-*.log
-docs/_build/
-build*
-.cproject
-.project
-.settings
-*.bp4
-*.hdf5
+data/
+sauve*
 checkpoint
 restart*
 forces.dat*
-data/
+*.bp4
+*.hdf5
+*.xdmf
+*.log
+
+# Documentation output
+docs/_build/
+
+# Local generated media
+*.jpg
+*.pdf
+*.svg
+
+# Xcode project metadata
+*.xcuserstate
+*.xc*
+*.pbxproj

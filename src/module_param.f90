@@ -322,7 +322,7 @@ module param
 
   integer :: cont_phi,itr,itime,itest,iprocessing
   integer :: ifft,istret,iforc_entree,iturb
-  integer :: iin,itimescheme,iimplicit,ifirst,ilast,iles,iopen,iopenS
+  integer :: iin,iread_init,itimescheme,iimplicit,ifirst,ilast,iles,iopen,iopenS
   integer :: ntime ! How many (sub)timestpeps do we need to store?
   integer :: icheckpoint,irestart,idebmod,ioutput,imodulo2,idemarre,icommence,irecord
   integer :: ioutflow, ninflows, ntimesteps
@@ -336,7 +336,7 @@ module param
   real(mytype) :: wrotation,ro
   real(mytype) :: dens1, dens2
   real(mytype) :: C_filter
-  real(mytype) :: inflow_offset, theta_jet
+  real(mytype) :: theta_jet
   character(len=512) :: inflowpath
   logical :: validation_restart
   logical :: mhd_active,particle_active
@@ -399,8 +399,10 @@ module param
   !! Gravity field (vector components)
   real(mytype) :: gravx, gravy, gravz
 
-  !! Motion
+  !! Wall jet
   integer :: iMotion
+  real(mytype) :: inflow_offset, delta_low, delta_up
+  real(mytype) :: walljet_ramp_tau, walljet_top_v_relax
   
   !! LMN
   logical :: ilmn, ilmn_bound, ilmn_solve_temp

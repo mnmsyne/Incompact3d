@@ -42,14 +42,14 @@ subroutine parameter(input_i3d)
   integer :: longueur ,impi,j, is, total, ierr
 
   NAMELIST /BasicParam/ p_row, p_col, nx, ny, nz, istret, beta, xlx, yly, zlz, &
-       itype, iin, re, u1, u2, init_noise, inflow_noise, iopen, iopenS, &
+      itype, iin, iread_init, re, u1, u2, init_noise, inflow_noise, iopen, iopenS, &
        dt, ifirst, ilast, &
        numscalar, iibm, ilmn, &
        ilesmod, iscalar, &
        nclx1, nclxn, ncly1, nclyn, nclz1, nclzn, &
        ivisu, ipost, &
        gravx, gravy, gravz, &
-       cpg, idir_stream, inflow_offset, theta_jet, &
+       cpg, idir_stream, theta_jet, &
        ifilter, C_filter, iturbine, mhd_active, particle_active, FreeStream
 
   NAMELIST /NumOptions/ ifirstder, isecondder, itimescheme, iimplicit, &
@@ -67,7 +67,7 @@ subroutine parameter(input_i3d)
   NAMELIST /ThetaDotModel/ jtheta_dot,jthickness,Method_FT,K_theta,H_12
   NAMELIST /BlowingModel/ Blowing,A_Blowing,Xst_Blowing,Xen_Blowing,Range_Smooth  
   NAMELIST /AdversePresGrad/ APG,APG_DpDX,APG_Beta
-  NAMELIST /Motion/ iMotion
+   NAMELIST /WallJetParam/ inflow_offset, delta_low, delta_up, iMotion, walljet_ramp_tau, walljet_top_v_relax
   NAMELIST /FringeMethod/ ifringe, fringe_beta, fringe_rm
   NAMELIST /ProbeSpectra/ Pro_Spectra,X_Pro_Spectra,Z_Pro_Spectra
   NAMELIST /Tripping/ itrip,A_tr,xs_tr_tbl,ys_tr_tbl,ts_tr_tbl,x0_tr_tbl
@@ -259,12 +259,11 @@ subroutine parameter(input_i3d)
   endif
 
   if (itype.eq.itype_movingjet) then
-     read(10, nml=Motion); rewind(10)
      read(10, nml=FringeMethod); rewind(10)
   endif
 
   if (itype.eq.itype_walljet) then
-     read(10, nml=Motion); rewind(10)
+     read(10, nml=WallJetParam); rewind(10)
   endif
   
   if (itype.eq.itype_tbl) then
@@ -639,6 +638,7 @@ subroutine parameter(input_i3d)
      write(*,*) '==========================================================='
      write(*,"(' spinup_time            : ',I17)") spinup_time
      write(*,"(' wrotation              : ',F17.8)") wrotation
+     write(*,"(' initstat               : ',I17)") initstat
      write(*,*) '==========================================================='
      if (iibm==0) write(*,"(' Immersed boundary      : ',A17)") "off"
      if (iibm.gt.1) then
@@ -759,6 +759,7 @@ subroutine parameter_defaults()
   init_noise = zero
   inflow_noise = zero
   iin = 0
+  iread_init = 0
   iopen = 0
   iopenS = 0
   itimescheme = 4
@@ -841,8 +842,13 @@ subroutine parameter_defaults()
   rai = -1.0 !inner radius
   rao = -1.0 !outer radius
   
-  inflow_offset = 0.0
   theta_jet = 0.0
+  !! Wall jet
+  inflow_offset = 0.0
+  delta_low = 0.0
+  delta_up = 0.0
+   walljet_ramp_tau = one
+   walljet_top_v_relax = one
 
   !! Filter
   ifilter=0

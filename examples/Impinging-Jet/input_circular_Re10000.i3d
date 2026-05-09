@@ -32,12 +32,13 @@ nclz1 = 2
 nclzn = 2
 
 ! Flow parameters
-iin = 4                ! Inflow conditions (1: classic, 2: turbinit)
+iin = 2                ! Inflow conditions (1: classic, 2: turbinit)
 re  = 10000.           ! nu=1/re (Kinematic Viscosity)
 u1  = 1                ! u1 (max velocity) (for inflow condition)
 u2  = 28.              ! u2 (min velocity) (for inflow condition)
 init_noise = 0.0       ! Turbulence intensity (1=100%) !! Initial condition
 inflow_noise = 0.2     ! Turbulence intensity (1=100%) !! Inflow condition
+iread_init = 1
 iopen = 1
 iopenS = 1
 

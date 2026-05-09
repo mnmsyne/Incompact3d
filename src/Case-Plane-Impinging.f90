@@ -56,6 +56,7 @@ contains
     real(mytype), dimension(xsize(1), xsize(3)) :: uxprime, uyprime, uzprime
 
     uxprime = zero; uyprime = zero; uzprime = zero
+
     if (iin.ne.0) then
        call random_number(uxprime)
        call random_number(uyprime)
@@ -315,24 +316,33 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
 
     integer :: is, code, ierr
-    logical :: dir_exists
+    logical :: has_ux, has_uy, has_uz
 
     ux1=zero; uy1=zero; uz1=zero
 
-    if(iin.eq.4) then
-      inquire(file="initial/ux.bin", exist=dir_exists)
-      if (.not. dir_exists) then
-         if (nrank.eq.0) write(*,*) 'Error: initial data does not exist!'
-         call MPI_ABORT(MPI_COMM_WORLD,code,ierr); stop
+    if(iread_init.eq.1) then
+      inquire(file="initial/ux.bin", exist=has_ux)
+      inquire(file="initial/uy.bin", exist=has_uy)
+      inquire(file="initial/uz.bin", exist=has_uz)
+      if (.not. (has_ux .and. has_uy .and. has_uz)) then
+         if (nrank.eq.0) then
+            write(*,*) 'Error: missing required initial files in ./initial/'
+            if (.not. has_ux) write(*,*) '  - ./initial/ux.bin'
+            if (.not. has_uy) write(*,*) '  - ./initial/uy.bin'
+            if (.not. has_uz) write(*,*) '  - ./initial/uz.bin'
+         endif
+         call MPI_ABORT(MPI_COMM_WORLD, code, ierr); stop
       endif
 
       !Read velocity field
-      if (nrank.eq.0) write(*,*) 'reading : ', './initial/ux.bin'
+      if (nrank.eq.0) write(*,*) 'Reading : ', './initial/ux.bin'
       call decomp_2d_read_one(1, ux1, "initial", "ux.bin", io_jet, reduce_prec=.false.)
-      if (nrank.eq.0) write(*,*) 'reading : ', './initial/uy.bin'
+      if (nrank.eq.0) write(*,*) 'Reading : ', './initial/uy.bin'
       call decomp_2d_read_one(1, uy1, "initial", "uy.bin", io_jet, reduce_prec=.false.)
-      if (nrank.eq.0) write(*,*) 'reading : ', './initial/uz.bin'
+      if (nrank.eq.0) write(*,*) 'Reading : ', './initial/uz.bin'
       call decomp_2d_read_one(1, uz1, "initial", "uz.bin", io_jet, reduce_prec=.false.)
+    else
+      if (nrank.eq.0) write(*,*) 'Initial: using zero velocity field'
     endif
 
     if (iscalar.eq.1) then
