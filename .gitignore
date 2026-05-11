@@ -4,8 +4,6 @@
 .project
 .settings
 .vscode/
-.codex/
-.agents/
 *.swp
 *~
 .#*

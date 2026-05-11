@@ -318,6 +318,7 @@ module param
        itype_cavity = 13, &
        itype_pipe = 14, &
        itype_ptbl = 15, &
+       itype_rectosc = 16, &
        itype_rbc = 100
 
   integer :: cont_phi,itr,itime,itest,iprocessing
@@ -681,6 +682,7 @@ module ibm_param
   use decomp_2d_constants, only : mytype
   real(mytype) :: cex,cey,cez,ra,rai,rao,ubcx,ubcy,ubcz,rads, c_air
   real(mytype) :: chord,thickness,omega
+  real(mytype) :: rect_length, rect_width, rect_amp
   integer :: inana ! Analytical BC as Input
   integer :: imove
 end module ibm_param

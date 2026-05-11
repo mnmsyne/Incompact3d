@@ -30,6 +30,7 @@ add_executable(xcompact3d
                     Case-Plane-Jet.f90
                     Case-PTBL.f90
                     Case-RBC.f90
+                    Case-Rectangle-Oscillation.f90
                     Case-Sandbox.f90
                     Case-Swirl-Jet.f90
                     Case-TBL.f90

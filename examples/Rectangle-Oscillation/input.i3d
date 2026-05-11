@@ -1,0 +1,150 @@
+! -*- mode: f90 -*-
+
+!===================
+&BasicParam
+!===================
+
+! Flow type (16=oscillating rectangle)
+itype = 16
+
+! Domain decomposition
+p_row = 0
+p_col = 0
+
+! Mesh
+nx = 513
+ny = 257
+nz = 1
+istret = 0
+beta = 1.0
+
+! Domain
+xlx = 8.0
+yly = 2.0
+zlz = 1.0
+
+! Boundary conditions
+nclx1 = 2
+nclxn = 2
+ncly1 = 0
+nclyn = 0
+nclz1 = 0
+nclzn = 0
+
+! Flow parameters: Re is based on rectangle length L=1 and half-cycle mean speed U=1.
+iin = 0
+re  = 100.0
+u1  = 0.0
+u2  = 0.0
+init_noise = 0.0
+inflow_noise = 0.0
+
+! Time stepping
+dt = 0.00025
+ifirst = 1
+ilast = 8000
+
+! Enable modelling tools
+ilesmod = 0
+iscalar = 0
+iibm = 3
+
+/End
+
+!====================
+&NumOptions
+!====================
+
+ifirstder = 4
+isecondder = 5
+ipinter = 3
+itimescheme = 3
+
+/End
+
+!=================
+&InOutParam
+!=================
+
+irestart = 0
+icheckpoint = 2000
+ioutput = 1000
+nvisu = 1
+ilist = 50
+
+/End
+
+!=================
+&Statistics
+!=================
+
+nstat = 1
+initstat = 8000
+
+/End
+
+!================
+&ScalarParam
+!================
+
+numscalar = 0
+Sc = 0.2
+
+/End
+
+!================
+&LESModel
+!================
+
+jles = 0
+smagcst = 0.14
+SmagWallDamp = 1
+walecst = 0.5
+iconserv = 0
+
+/End
+
+!================
+&ibmstuff
+!================
+
+imove = 1
+
+! Rectangular plate center at rest position.
+cex = 4.0
+cey = 1.0
+cez = 0.0
+
+! Rectangle dimensions: length in x, width in y, full span in z.
+rect_length = 1.0
+rect_width = 0.05
+
+! Sinusoidal motion: x_c(t)=cex+A sin(omega tau).
+! With T=2 and omega=pi, half-period is 1.  Since U_mean,half=1,
+! the half-cycle travel distance is 1 and A=0.5.  Leaving rect_amp=0
+! makes the code compute A=pi/(2 omega)=0.5 automatically.
+omega = 3.141592653589793
+rect_amp = 0.0
+
+nraf = 10
+nobjmax = 2
+npif = 2
+izap = 1
+ianal = 0
+
+iforces = 0
+nvol = 1
+
+/End
+
+&ForceCVs
+
+xld(1) = 2.0
+xrd(1) = 6.0
+yld(1) = 0.5
+yud(1) = 1.5
+
+/End
+
+&CASE
+/End

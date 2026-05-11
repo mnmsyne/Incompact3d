@@ -72,7 +72,8 @@ subroutine parameter(input_i3d)
   NAMELIST /ProbeSpectra/ Pro_Spectra,X_Pro_Spectra,Z_Pro_Spectra
   NAMELIST /Tripping/ itrip,A_tr,xs_tr_tbl,ys_tr_tbl,ts_tr_tbl,x0_tr_tbl
   NAMELIST /ibmstuff/ cex,cey,cez,ra,rai,rao,nobjmax,nraf,nvol,iforces, &
-       npif, izap, ianal, imove, thickness, chord, omega ,ubcx,ubcy,ubcz,rads, c_air
+       npif, izap, ianal, imove, thickness, chord, omega ,ubcx,ubcy,ubcz,rads, c_air, &
+       rect_length, rect_width, rect_amp
   NAMELIST /LMN/ dens1, dens2, prandtl, ilmn_bound, ivarcoeff, ilmn_solve_temp, &
        massfrac, mol_weight, imultispecies, primary_species, &
        Fr, ibirman_eos
@@ -431,6 +432,8 @@ subroutine parameter(input_i3d)
         print *,'Cavity'  
      elseif (itype.eq.itype_ptbl) then
         print *,'Temporal turbulent boundary layer' 
+     elseif (itype.eq.itype_rectosc) then
+        print *,'Oscillating rectangle'
      elseif (itype.eq.itype_rbc) then
         print *,'Rayleigh-Bénard convection' 
      else
@@ -805,6 +808,9 @@ subroutine parameter_defaults()
   ubcx = zero
   ubcy = zero
   ubcz = zero
+  rect_length = one
+  rect_width = 0.05_mytype
+  rect_amp = zero
 
   nvol = 0
   iforces = 0

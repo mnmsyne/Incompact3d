@@ -50,8 +50,9 @@ contains
   subroutine geomcomplex(epsi, nxi, nxf, ny, nyi, nyf, nzi, nzf, dx, yp, dz, remp)
 
     USE param, ONLY : itype, itype_cyl, itype_hill, itype_channel,&
-                      itype_sandbox, itype_pipe, itype_rbc
+                      itype_sandbox, itype_pipe, itype_rbc, itype_rectosc
     USE cyl, ONLY : geomcomplex_cyl
+    USE rectosc, ONLY : geomcomplex_rectosc
     USE hill, ONLY : geomcomplex_hill
     USE channel, ONLY : geomcomplex_channel
     USE sandbox, ONLY : geomcomplex_sandbox
@@ -69,6 +70,10 @@ contains
     IF (itype.EQ.itype_cyl) THEN
 
        CALL geomcomplex_cyl(epsi, nxi, nxf, ny, nyi, nyf, nzi, nzf, dx, yp, remp)
+
+    ELSEIF (itype.EQ.itype_rectosc) THEN
+
+       CALL geomcomplex_rectosc(epsi, nxi, nxf, ny, nyi, nyf, nzi, nzf, dx, yp, remp)
 
     ELSEIF (itype.EQ.itype_hill) THEN
 
