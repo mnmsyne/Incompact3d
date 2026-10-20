@@ -16,7 +16,200 @@ module swirljet
   PUBLIC :: init_swirljet, boundary_conditions_swirljet, postprocess_swirljet, &
             visu_swirljet, visu_swirljet_init
 
+  type :: inlet_table
+     integer :: ny = 0, nz = 0
+     real(mytype) :: ri = 0, ro = 0
+     real(mytype), allocatable :: y(:), z(:), velocity(:,:,:)
+  end type inlet_table
+
+  ! Cached local X-pencil inlet plane; loaded once, including after restart.
+  real(mytype), allocatable, save :: swirl_velocity(:,:,:)
+
 contains
+
+  subroutine read_inlet_table(filename, table, status, message)
+    use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
+    use, intrinsic :: iso_fortran_env, only : int64
+    character(len=*), intent(in) :: filename
+    type(inlet_table), intent(out) :: table
+    integer, intent(out) :: status
+    character(len=*), intent(out) :: message
+    character(len=:), allocatable :: line
+    real(mytype) :: dimensions(2), radii(2)
+    integer :: unit, ios, j, k
+
+    status = 1
+    message = 'Cannot open swirl inlet file: '//trim(filename)
+    open(newunit=unit, file=filename, status='old', action='read', iostat=ios)
+    if (ios /= 0) return
+    message = 'Invalid swirl inlet header (expected SWIRL_INLET_V1)'
+    call read_table_line(unit, line, 32, ios)
+    if (ios /= 0) goto 900
+    if (trim(line) /= 'SWIRL_INLET_V1') goto 900
+    message = 'Invalid swirl inlet dimensions'
+    call read_table_row(unit, dimensions, ios)
+    if (ios /= 0) goto 900
+    if (any(dimensions < 2) .or. any(dimensions > 10000000)) goto 900
+    if (any(dimensions /= anint(dimensions))) goto 900
+    table%ny = int(dimensions(1))
+    table%nz = int(dimensions(2))
+    if (table%ny < 2 .or. table%nz < 2) goto 900
+    if (int(table%ny,int64)*int(table%nz,int64) > 10000000_int64) goto 900
+    message = 'Invalid swirl inlet radii'
+    call read_table_row(unit, radii, ios)
+    if (ios /= 0) goto 900
+    table%ri = radii(1)
+    table%ro = radii(2)
+    if (.not.ieee_is_finite(table%ri) .or. .not.ieee_is_finite(table%ro)) goto 900
+    if (table%ri <= 0 .or. table%ro <= table%ri) goto 900
+    allocate(table%y(table%ny), table%z(table%nz), &
+         table%velocity(3,table%ny,table%nz), stat=ios)
+    message = 'Cannot allocate swirl inlet table'
+    if (ios /= 0) goto 900
+    message = 'Invalid swirl inlet coordinates'
+    call read_table_row(unit, table%y, ios)
+    if (ios /= 0) goto 900
+    call read_table_row(unit, table%z, ios)
+    if (ios /= 0) goto 900
+    if (.not.all(ieee_is_finite(table%y)) .or. .not.all(ieee_is_finite(table%z))) goto 900
+    if (any(table%y(2:) <= table%y(:table%ny-1))) goto 900
+    if (any(table%z(2:) <= table%z(:table%nz-1))) goto 900
+    message = 'Invalid or truncated swirl inlet velocity data'
+    do k = 1, table%nz
+       do j = 1, table%ny
+          call read_table_row(unit, table%velocity(:,j,k), ios)
+          if (ios /= 0) goto 900
+       enddo
+    enddo
+    if (.not.all(ieee_is_finite(table%velocity))) goto 900
+    message = 'Unexpected records after swirl inlet velocity data'
+    do
+       call read_table_line(unit, line, 256, ios)
+       if (ios < 0) exit
+       if (ios /= 0) goto 900
+       if (len_trim(line) /= 0) goto 900
+    enddo
+    status = 0
+    message = ''
+900 close(unit)
+  end subroutine read_inlet_table
+
+  ! Read a complete record, rejecting oversized/truncated lines. A negative
+  ! status denotes EOF only; other failures must not be mistaken for EOF.
+  subroutine read_table_line(unit, line, max_length, status)
+    use, intrinsic :: iso_fortran_env, only : iostat_eor, iostat_end
+    integer, intent(in) :: unit, max_length
+    character(len=:), allocatable, intent(out) :: line
+    integer, intent(out) :: status
+    character(len=1024) :: chunk
+    integer :: ios, received
+
+    line = ''
+    status = 1
+    do
+       read(unit, '(A)', advance='no', size=received, iostat=ios) chunk
+       if (received > max_length-len(line)) return
+       line = line//chunk(:received)
+       if (ios == iostat_eor) then
+          status = 0
+          return
+       endif
+       if (ios == iostat_end) then
+          status = -1
+          return
+       endif
+       if (ios /= 0) return
+    enddo
+  end subroutine read_table_line
+
+  ! List-directed input alone accepts null fields, slash termination and repeat
+  ! counts. Require exactly one finite numeric token for each output value.
+  subroutine read_table_row(unit, values, status)
+    use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
+    integer, intent(in) :: unit
+    real(mytype), intent(out) :: values(:)
+    integer, intent(out) :: status
+    character(len=:), allocatable :: line
+    integer :: i, first, last, cursor, length, ios
+
+    values = 0
+    call read_table_line(unit, line, 64*size(values), ios)
+    status = 1
+    if (ios /= 0) return
+    length = len_trim(line)
+    cursor = 1
+    do i = 1, size(values)
+       do while (cursor <= length)
+          if (line(cursor:cursor) /= ' ' .and. iachar(line(cursor:cursor)) /= 9) exit
+          cursor = cursor+1
+       enddo
+       if (cursor > length) return
+       first = cursor
+       do while (cursor <= length)
+          if (line(cursor:cursor) == ' ' .or. iachar(line(cursor:cursor)) == 9) exit
+          cursor = cursor+1
+       enddo
+       last = cursor-1
+       if (verify(line(first:last), '0123456789+-.eEdD') /= 0) return
+       read(line(first:last), *, iostat=ios) values(i)
+       if (ios /= 0) return
+       if (.not.ieee_is_finite(values(i))) return
+    enddo
+    do while (cursor <= length)
+       if (line(cursor:cursor) /= ' ' .and. iachar(line(cursor:cursor)) /= 9) return
+       cursor = cursor+1
+    enddo
+    status = 0
+  end subroutine read_table_row
+
+  subroutine sample_inlet_table(table, y, z, velocity, status)
+    type(inlet_table), intent(in) :: table
+    real(mytype), intent(in) :: y, z
+    real(mytype), intent(out) :: velocity(3)
+    integer, intent(out) :: status
+    integer :: j, k
+    real(mytype) :: fy, fz
+
+    velocity = 0
+    call bracket(table%y, y, j, fy, status)
+    if (status /= 0) return
+    call bracket(table%z, z, k, fz, status)
+    if (status /= 0) return
+    velocity = (1-fy)*(1-fz)*table%velocity(:,j,k) &
+         + fy*(1-fz)*table%velocity(:,j+1,k) &
+         + (1-fy)*fz*table%velocity(:,j,k+1) &
+         + fy*fz*table%velocity(:,j+1,k+1)
+  end subroutine sample_inlet_table
+
+  subroutine bracket(axis, value, index, fraction, status)
+    use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
+    real(mytype), intent(in) :: axis(:), value
+    integer, intent(out) :: index, status
+    real(mytype), intent(out) :: fraction
+    integer :: lo, hi, mid
+    real(mytype) :: clipped, tolerance
+
+    status = 1
+    index = 1
+    fraction = 0
+    if (.not.ieee_is_finite(value)) return
+    tolerance = 64*epsilon(value)*max(1._mytype, abs(axis(1)), abs(axis(size(axis))))
+    if (value < axis(1)-tolerance .or. value > axis(size(axis))+tolerance) return
+    clipped = max(axis(1), min(value, axis(size(axis))))
+    lo = 1
+    hi = size(axis)
+    do while (hi-lo > 1)
+       mid = (lo+hi)/2
+       if (clipped < axis(mid)) then
+          hi = mid
+       else
+          lo = mid
+       endif
+    enddo
+    index = lo
+    fraction = (clipped-axis(lo))/(axis(lo+1)-axis(lo))
+    status = 0
+  end subroutine bracket
 
   ! Validate on every rank before evaluating the annular profile.
   subroutine validate_swirljet_radii()
@@ -43,6 +236,105 @@ contains
     stop 1
 
   end subroutine validate_swirljet_radii
+
+  subroutine load_swirljet_inlet()
+
+    use ibm_param, only : rai, rao
+    use mpi, only : MPI_BCAST, MPI_ALLREDUCE, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, MPI_ABORT
+
+    implicit none
+
+    type(inlet_table) :: table
+    integer :: status, global_status, ierr, dims(2), j, k, allocation_status
+    character(len=256) :: message
+    character(len=1024) :: swirl_inlet_file
+    real(mytype) :: y, z, value(3), tolerance
+
+    if (iin < 0 .or. iin > 4 .or. iin == 3) then
+       if (nrank == 0) write(*,*) 'Swirling jet supports iin=0/1/2 (analytic) or iin=4 (static table)'
+       call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
+       stop 1
+    endif
+    if (iin /= 4) return
+    if (allocated(swirl_velocity)) return
+    if (len_trim(inflowpath) == 0) then
+       swirl_inlet_file = 'swirl_inlet.dat'
+    else
+       swirl_inlet_file = trim(inflowpath)//'/swirl_inlet.dat'
+    endif
+    status = 0
+    if (nrank == 0) then
+       if (inflow_noise /= zero) then
+          status = 1
+          message = 'Static swirl inlet requires inflow_noise=0; use init_noise for initial perturbations'
+       else
+          call read_inlet_table(trim(swirl_inlet_file), table, status, message)
+       endif
+       if (status /= 0) write(*,*) trim(message)
+    endif
+    call MPI_BCAST(status, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+    if (status /= 0) then
+       call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
+       stop 1
+    endif
+    if (nrank == 0) dims = [table%ny, table%nz]
+    call MPI_BCAST(dims, 2, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+    status = 0
+    if (nrank /= 0) then
+       table%ny = dims(1)
+       table%nz = dims(2)
+       allocate(table%y(dims(1)), table%z(dims(2)), &
+            table%velocity(3,dims(1),dims(2)), stat=allocation_status)
+       if (allocation_status /= 0) status = 1
+    endif
+    call MPI_ALLREDUCE(status, global_status, 1, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, ierr)
+    if (global_status /= 0) then
+       if (nrank == 0) write(*,*) 'Cannot allocate distributed swirl inlet table'
+       call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
+       stop 1
+    endif
+    call MPI_BCAST(table%ri, 1, real_type, 0, MPI_COMM_WORLD, ierr)
+    call MPI_BCAST(table%ro, 1, real_type, 0, MPI_COMM_WORLD, ierr)
+    call MPI_BCAST(table%y, dims(1), real_type, 0, MPI_COMM_WORLD, ierr)
+    call MPI_BCAST(table%z, dims(2), real_type, 0, MPI_COMM_WORLD, ierr)
+    call MPI_BCAST(table%velocity, 3*dims(1)*dims(2), real_type, 0, MPI_COMM_WORLD, ierr)
+    tolerance = 64*epsilon(one)*max(one, rao)
+    if (abs(table%ri-rai) > tolerance .or. abs(table%ro-rao) > tolerance) then
+       if (nrank == 0) write(*,*) 'Swirl inlet table radii do not match rai/rao'
+       call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
+       stop 1
+    endif
+    allocate(swirl_velocity(3,xsize(2),xsize(3)), stat=allocation_status)
+    status = 0
+    if (allocation_status /= 0) status = 1
+    call MPI_ALLREDUCE(status, global_status, 1, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, ierr)
+    if (global_status /= 0) then
+       if (nrank == 0) write(*,*) 'Cannot allocate local swirl inlet plane'
+       call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
+       stop 1
+    endif
+    do k = 1, xsize(3)
+       z = (k+xstart(3)-2)*dz-zlz/2
+       do j = 1, xsize(2)
+          if (istret == 0) then
+             y = (j+xstart(2)-2)*dy-yly/2
+          else
+             y = yp(j+xstart(2)-1)-yly/2
+          endif
+          call sample_inlet_table(table, y, z, value, allocation_status)
+          if (allocation_status /= 0) status = 1
+          swirl_velocity(:,j,k) = value
+       enddo
+    enddo
+    call MPI_ALLREDUCE(status, global_status, 1, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, ierr)
+    if (global_status /= 0) then
+       if (nrank == 0) write(*,*) 'Swirl inlet table does not cover the solver inlet; extrapolation is disabled'
+       call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
+       stop 1
+    endif
+    if (nrank == 0) write(*,*) 'Static swirl inlet loaded: ', trim(swirl_inlet_file), ' grid=', dims
+
+  end subroutine load_swirljet_inlet
 
   subroutine boundary_conditions_swirljet (ux,uy,uz,phi)
 
@@ -75,6 +367,7 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
 
     call validate_swirljet_radii()
+    call load_swirljet_inlet()
 
     delta = 0.1_mytype
     ratio = rai/rao
@@ -91,7 +384,11 @@ contains
           r=sqrt(y**two+z**two)
           rm=r/rao
           theta=atan2(y,z)
-          if (r.gt.rao) then
+          if (iin == 4) then
+             bxx1(j,k) = swirl_velocity(1,j,k)
+             bxy1(j,k) = swirl_velocity(2,j,k)
+             bxz1(j,k) = swirl_velocity(3,j,k)
+          elseif (r.gt.rao) then
              bxx1(j,k) = u1/onehundred
              bxy1(j,k) = zero
              bxz1(j,k) = zero
@@ -158,7 +455,9 @@ contains
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxmax,1,real_type,MPI_MAX,MPI_COMM_WORLD,code)
     call MPI_ALLREDUCE(MPI_IN_PLACE,uxmin,1,real_type,MPI_MIN,MPI_COMM_WORLD,code)
 
-    if (u1 == zero) then
+    if (iin == 4) then
+       cx=uxmax*gdt(itr)*udx
+    elseif (u1 == zero) then
        cx=(half*(uxmax+uxmin))*gdt(itr)*udx
     elseif (u1 == one) then
        cx=uxmax*gdt(itr)*udx
@@ -178,7 +477,9 @@ contains
     enddo
 
     if (iscalar==1) then
-       if (u2==zero) then
+       if (iin == 4) then
+          cx=uxmax*gdt(itr)*udx
+       elseif (u2==zero) then
           cx=(half*(uxmax+uxmin))*gdt(itr)*udx
        elseif (u2==one) then
           cx=uxmax*gdt(itr)*udx
@@ -220,6 +521,7 @@ contains
     real(mytype) :: ratio, um, rm, delta
 
     call validate_swirljet_radii()
+    call load_swirljet_inlet()
 
     ux1=zero; uy1=zero; uz1=zero
 
@@ -263,7 +565,11 @@ contains
           rm=r/rao
           theta=atan2(y,z)
           do i=1,xsize(1)
-             if (r.gt.rao) then
+             if (iin == 4) then
+                ux1(i,j,k) = ux1(i,j,k) + swirl_velocity(1,j,k)
+                uy1(i,j,k) = uy1(i,j,k) + swirl_velocity(2,j,k)
+                uz1(i,j,k) = uz1(i,j,k) + swirl_velocity(3,j,k)
+             elseif (r.gt.rao) then
                 ux1(i,j,k) = ux1(i,j,k) + u1/onehundred
                 uy1(i,j,k) = uy1(i,j,k)
                 uz1(i,j,k) = uz1(i,j,k)
