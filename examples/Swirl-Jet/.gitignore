@@ -1,0 +1,5 @@
+# Case result archives: all data ignored, documentation tracked.
+/*
+!/.gitignore
+!/README.md
+!/input.i3d
