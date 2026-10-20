@@ -459,8 +459,8 @@ subroutine parameter(input_i3d)
        endif
      endif
      !
-     if (ilesmod.ne.0) then
-       write(*,*) '                   : DNS'
+     if (ilesmod.eq.0) then
+       write(*,*) '                   : LES disabled (see viscous operator)'
      else
        if (jles==1) then
           write(*,*) '                   : Phys Smag'
