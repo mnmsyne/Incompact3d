@@ -1,0 +1,153 @@
+! Coaxial swirling jet LES with the steady three-component CSV-derived inlet.
+! Reference scales: Di=0.015 m, Ub=0.441409596 m/s, source plane x=0.002 m.
+! Measured Re=7447.856; re=7450 differs by approximately 0.029%.
+! Generate swirl_inlet.dat with prepare_inlet.py before starting.
+! This full-size cold-start setup has not been validated by a solver run.
+
+!===================
+&BasicParam
+!===================
+
+! Flow type
+itype = 733
+
+! Domain decomposition
+p_row=0               ! Row partition
+p_col=0               ! Column partition
+
+! Mesh
+nx=513                ! X-direction nodes
+ny=384                ! Y-direction nodes
+nz=384                ! Z-direction nodes
+istret = 0            ! y mesh refinement (0:no, 1:center, 2:both sides, 3:bottom)
+beta = 1.5            ! Refinement parameter (beta)
+
+! Domain
+xlx = 24.             ! Lx / Di
+yly = 8.              ! Ly / Di
+zlz = 8.              ! Lz / Di
+
+! Boundary conditions
+nclx1 = 2
+nclxn = 2
+ncly1 = 0
+nclyn = 0
+nclz1 = 0
+nclzn = 0
+
+! Flow parameters
+iin = 4               ! Swirl only: steady Cartesian three-component inlet
+re  = 7450.           ! nu=1/re (Kinematic Viscosity)
+u1  = 0.5             ! Analytic-mode parameter; file velocity is not rescaled
+u2  = 0.3             ! Analytic-mode parameter; file rotation sign is preserved
+init_noise = 0.02     ! Turbulence intensity (1=100%) !! Initial condition
+inflow_noise = 0.0    ! Turbulence intensity (1=100%) !! Inflow condition
+
+! Time stepping
+dt = 0.001            ! Time step
+ifirst = 1            ! First iteration
+ilast = 10000         ! Last iteration; increase for flow-through/statistical convergence
+
+! Enable modelling tools
+ilesmod=4             ! Nonzero enables LES; jles=4 selects iSVV
+numscalar=2           ! How many scalars?
+iibm=0                ! Flag for immersed boundary method
+
+! Enable io
+ivisu=1               ! Store snapshots
+ipost=1               ! Case-specific postprocessing hook (currently empty)
+
+/End
+
+!====================
+&NumOptions
+!====================
+
+! Spatial derivatives
+ifirstder = 4         ! (1->2nd central, 2->4th central, 3->4th compact, 4-> 6th compact)
+isecondder = 5        ! Hyperviscous compact operator required by iSVV
+ipinter = 3           ! interpolation scheme (1: classic, 2: optimized, 3: optimized agressive)
+
+! Time scheme
+itimescheme = 3       ! Time integration scheme (1->Euler,2->AB2,3->AB3,4->AB4,5->RK3,6->RK4)
+
+! Reference iSVV coefficients from the existing analytical swirl setup.
+! These require dissipation/grid sensitivity checks for this jet.
+nu0nu = 4.0           ! Extra viscosity / molecular viscosity at cutoff
+cnu = 0.44            ! Relative extra viscosity at k_m=2*pi/3
+
+/End
+
+!=================
+&InOutParam
+!=================
+
+! Basic I/O
+irestart = 0          ! Cold start; file plane is extruded along x initially
+inflowpath = './'     ! Directory containing swirl_inlet.dat (iin=4)
+icheckpoint = 5000    ! Frequency for writing backup file
+ioutput = 2500        ! Frequency for visualization
+ilist = 10            ! Frequency for writing on screen
+nvisu = 2             ! Size for visualisation collection
+
+/End
+
+!=================
+&Statistics
+!=================
+
+spinup_time = 0       ! number of time steps with a rotation to trigger turbulence
+nstat = 1             ! Size arrays for statistic collection
+
+/End
+
+!#######################
+! OPTIONAL PARAMETERS
+!#######################
+
+!================
+&ibmstuff
+!================
+
+rai=0.50      ! Inner radius; finite and 0 < rai < rao
+rao=1.00      ! Outer radius; finite and larger than rai
+
+/End
+
+!================
+&ScalarParam
+!================
+
+! Geometric passive tracers, not measured scalar fields on the CSV plane.
+! iSVV uses the same hyperviscous derivative operator for scalars and velocity.
+! Sc scales scalar diffusion; jles=4 does not add explicit nut/Sc SGS terms.
+! No hard [0,1] clipping is enabled; monitor extrema and scalar budgets.
+Sc(1) = 1.0           ! Schmidt number for scalar diffusion
+cp(1) = 1.0           ! initial concentrations (geometric scalar profiles)
+Ri(1) = 0.0           ! No buoyancy coupling
+uset(1) = 0.0         ! No settling
+
+Sc(2) = 1.0           ! Schmidt number for scalar diffusion
+cp(2) = 1.0           ! initial concentrations (geometric scalar profiles)
+Ri(2) = 0.0           ! No buoyancy coupling
+uset(2) = 0.0         ! No settling
+
+nclxS1 = 2
+nclxSn = 2
+nclyS1 = 0
+nclySn = 0
+nclzS1 = 0
+nclzSn = 0
+
+/End
+
+!================
+&LESModel
+!================
+
+jles = 4              ! Implicit spectral vanishing viscosity (iSVV)
+
+/End
+
+&CASE
+/End
