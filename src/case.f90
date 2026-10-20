@@ -19,6 +19,7 @@ module case
   use abl
   use uniform
   use sandbox
+  use swirljet
   use cavity
   use pipe
   use ptbl
@@ -86,6 +87,10 @@ contains
     elseif (itype.eq.itype_cyl) then
 
        call init_cyl (ux1, uy1, uz1, phi1)
+
+    elseif (itype.eq.itype_swirljet) then
+
+       call init_swirljet (ux1, uy1, uz1, phi1)
 
     elseif (itype.eq.itype_mixlayer) then
 
@@ -195,6 +200,10 @@ contains
     elseif (itype.eq.itype_cyl) then
 
        call boundary_conditions_cyl (ux, uy, uz, phi)
+
+    elseif (itype.eq.itype_swirljet) then
+
+       call boundary_conditions_swirljet (ux, uy, uz, phi)
 
     elseif (itype.eq.itype_tbl) then
 
@@ -358,6 +367,10 @@ contains
 
        call postprocess_cyl (ux, uy, uz, ep)
 
+    elseif (itype.eq.itype_swirljet) then
+
+       call postprocess_swirljet (ux, uy, uz, pp, phi, ep)
+
     elseif (itype.eq.itype_tbl) then
 
        call postprocess_tbl (ux, uy, uz, ep)
@@ -420,6 +433,10 @@ contains
     else if (itype .eq. itype_cyl) then
 
        call visu_cyl_init(case_visu_init)
+
+    else if (itype .eq. itype_swirljet) then
+
+       call visu_swirljet_init(case_visu_init)
 
     else if (itype .eq. itype_tbl) then
 
@@ -496,6 +513,11 @@ contains
     elseif (itype.eq.itype_cyl) then
 
        call visu_cyl(ux1, uy1, uz1, pp3, phi1, ep1, num)
+       called_visu = .true.
+
+    elseif (itype.eq.itype_swirljet) then
+
+       call visu_swirljet(ux1, uy1, uz1, pp3, phi1, ep1, num)
        called_visu = .true.
 
     elseif (itype.eq.itype_tbl) then

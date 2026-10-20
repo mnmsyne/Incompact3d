@@ -304,6 +304,7 @@ module param
        itype_hill = 4, &
        itype_cyl = 5, &
        itype_mixlayer = 7, &
+       itype_swirljet = 733, &
        itype_tbl = 9, &
        itype_abl = 10, &
        itype_uniform = 11, &

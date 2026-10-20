@@ -242,6 +242,10 @@ subroutine parameter(input_i3d)
      read(10, nml=LESModel); rewind(10)
   endif
   
+  if (itype.eq.itype_swirljet) then
+     read(10, nml=ibmstuff); rewind(10)
+  endif
+
   !!==> Pasha
   if(itype .eq. 15) then
      read(10, nml=ThetaDotModel); rewind(10)
@@ -390,6 +394,8 @@ subroutine parameter(input_i3d)
         print *,'Uniform flow'
      elseif (itype.eq.itype_sandbox) then
         print *,'Sandbox'
+     elseif (itype.eq.itype_swirljet) then
+        print *,'Swirling Jet'
      elseif (itype.eq.itype_cavity) then
         print *,'Cavity'  
      elseif (itype.eq.itype_ptbl) then
