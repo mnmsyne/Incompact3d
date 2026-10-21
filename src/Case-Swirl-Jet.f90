@@ -240,7 +240,9 @@ contains
   subroutine load_swirljet_inlet()
 
     use ibm_param, only : rai, rao
-    use mpi, only : MPI_BCAST, MPI_ALLREDUCE, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, MPI_ABORT
+    ! Some Intel MPI bindings provide choice-buffer routines as externals.
+    ! Do not require MPI_BCAST/MPI_ALLREDUCE to be module exports via ONLY.
+    use mpi
 
     implicit none
 
