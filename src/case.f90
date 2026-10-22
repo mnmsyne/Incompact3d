@@ -32,11 +32,24 @@ module case
   
   private ! All functions/subroutines private by default
   public :: init, boundary_conditions, &
+            enforce_scalar_inlet, &
             momentum_forcing, scalar_forcing, set_fluid_properties, &
             test_flow, preprocessing, postprocessing, visu_case, & 
             visu_case_init, visu_case_finalise 
 
 contains
+  ! Reapply case-specific steady scalar data after every time-integration stage.
+  subroutine enforce_scalar_inlet(phi, dphi)
+
+    real(mytype), intent(inout) :: phi(xsize(1),xsize(2),xsize(3),numscalar)
+    real(mytype), intent(inout) :: dphi(xsize(1),xsize(2),xsize(3),ntime,numscalar)
+
+    if (itype.eq.itype_swirljet.and.iscalar.eq.1) then
+       call scalar_inlet_swirljet(phi, dphi)
+    endif
+
+  end subroutine enforce_scalar_inlet
+
   !##################################################################
   subroutine init (rho1, ux1, uy1, uz1, ep1, phi1, drho1, dux1, duy1, duz1, dphi1, &
        pp3, px1, py1, pz1)

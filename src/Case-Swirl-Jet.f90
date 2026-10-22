@@ -14,7 +14,7 @@ module swirljet
 
   PRIVATE !! All functions/subroutines private by default
   PUBLIC :: init_swirljet, boundary_conditions_swirljet, postprocess_swirljet, &
-            visu_swirljet, visu_swirljet_init
+            visu_swirljet, visu_swirljet_init, scalar_inlet_swirljet
 
   type :: inlet_table
      integer :: ny = 0, nz = 0
@@ -363,15 +363,14 @@ contains
 
     implicit none
 
-    integer  :: j,k,is
+    integer  :: j,k
     real(mytype) :: y, z, r, theta
-    real(mytype) :: ratio, um, rm, delta
+    real(mytype) :: ratio, um, rm
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
 
     call validate_swirljet_radii()
     call load_swirljet_inlet()
 
-    delta = 0.1_mytype
     ratio = rai/rao
 
     call random_number(bxo)
@@ -408,6 +407,21 @@ contains
        enddo
     enddo
 
+    call scalar_inlet_swirljet(phi)
+
+    return
+  end subroutine inflow
+
+  subroutine scalar_inlet_swirljet(phi, dphi)
+
+    use ibm_param, only : rai, rao
+
+    real(mytype), intent(inout) :: phi(xsize(1),xsize(2),xsize(3),numscalar)
+    real(mytype), intent(inout), optional :: dphi(xsize(1),xsize(2),xsize(3),ntime,numscalar)
+    real(mytype), parameter :: delta = 0.1_mytype
+    real(mytype) :: y, z, r
+    integer :: j, k, is
+
     if (iscalar.eq.1) then
        do is=1, numscalar
           do k=1,xsize(3)
@@ -424,10 +438,13 @@ contains
              enddo
           enddo
        enddo
+
+       ! A steady Dirichlet inlet has zero time derivative, including the
+       ! stored AB/RK history. Do not retain RHS values from before enforcement.
+       if (present(dphi)) dphi(1,:,:,:,:) = zero
     endif
 
-    return
-  end subroutine inflow
+  end subroutine scalar_inlet_swirljet
 
   subroutine outflow (ux,uy,uz,phi)
 

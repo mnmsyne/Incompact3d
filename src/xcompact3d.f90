@@ -67,6 +67,7 @@ program xcompact3d
         endif
 
         call int_time(rho1,ux1,uy1,uz1,phi1,drho1,dux1,duy1,duz1,dphi1)
+        call enforce_scalar_inlet(phi1,dphi1)
         call pre_correc(ux1,uy1,uz1,ep1)
 
         call calc_divu_constraint(divu3,rho1,phi1)
