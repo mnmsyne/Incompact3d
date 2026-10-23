@@ -16,9 +16,9 @@ p_row=0               ! Row partition
 p_col=0               ! Column partition
 
 ! Mesh
-nx=513                ! X-direction nodes
-ny=384                ! Y-direction nodes
-nz=384                ! Z-direction nodes
+nx=601                ! X-direction nodes
+ny=400                ! Y-direction nodes
+nz=400                ! Z-direction nodes
 istret = 0            ! y mesh refinement (0:no, 1:center, 2:both sides, 3:bottom)
 beta = 1.5            ! Refinement parameter (beta)
 
@@ -38,15 +38,15 @@ nclzn = 0
 ! Flow parameters
 iin = 4               ! Swirl only: steady Cartesian three-component inlet
 re  = 7450.           ! nu=1/re (Kinematic Viscosity)
-u1  = 0.5             ! Analytic-mode parameter; file velocity is not rescaled
-u2  = 0.3             ! Analytic-mode parameter; file rotation sign is preserved
+u1  = 1.0             ! Analytic-mode parameter; file velocity is not rescaled
+u2  = 0.6             ! Analytic-mode parameter; file rotation sign is preserved
 init_noise = 0.02     ! Turbulence intensity (1=100%) !! Initial condition
 inflow_noise = 0.0    ! Turbulence intensity (1=100%) !! Inflow condition
 
 ! Time stepping
 dt = 0.001            ! Time step
 ifirst = 1            ! First iteration
-ilast = 10000         ! Last iteration; increase for flow-through/statistical convergence
+ilast = 2000          ! Last iteration; increase for flow-through/statistical convergence
 
 ! Enable modelling tools
 ilesmod=4             ! Nonzero enables LES; jles=4 selects iSVV
@@ -55,7 +55,7 @@ iibm=0                ! Flag for immersed boundary method
 
 ! Enable io
 ivisu=1               ! Store snapshots
-ipost=1               ! Case-specific postprocessing hook (currently empty)
+ipost=1               ! Write scalar extrema, out-of-bounds fractions and scalar divergence CSV
 
 /End
 
@@ -85,9 +85,10 @@ cnu = 0.44            ! Relative extra viscosity at k_m=2*pi/3
 ! Basic I/O
 irestart = 0          ! Cold start; file plane is extruded along x initially
 inflowpath = './'     ! Directory containing swirl_inlet.dat (iin=4)
-icheckpoint = 5000    ! Frequency for writing backup file
-ioutput = 2500        ! Frequency for visualization
-ilist = 10            ! Frequency for writing on screen
+icheckpoint = 2000    ! Frequency for writing backup file
+ioutput = 1000        ! Frequency for visualization
+iprocessing = 10      ! CSV sampling every 10 complete time steps (also at cold-start step 0)
+ilist = 1             ! Frequency for writing on screen
 nvisu = 2             ! Size for visualisation collection
 
 /End
@@ -121,7 +122,7 @@ rao=1.00      ! Outer radius; finite and larger than rai
 ! Geometric passive tracers, not measured scalar fields on the CSV plane.
 ! iSVV uses the same hyperviscous derivative operator for scalars and velocity.
 ! Sc scales scalar diffusion; jles=4 does not add explicit nut/Sc SGS terms.
-! No hard [0,1] clipping is enabled; monitor extrema and scalar budgets.
+! Convective form is the default; no hard [0,1] clipping is enabled.
 Sc(1) = 1.0           ! Schmidt number for scalar diffusion
 cp(1) = 1.0           ! initial concentrations (geometric scalar profiles)
 Ri(1) = 0.0           ! No buoyancy coupling

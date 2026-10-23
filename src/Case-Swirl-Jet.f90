@@ -24,6 +24,7 @@ module swirljet
 
   ! Cached local X-pencil inlet plane; loaded once, including after restart.
   real(mytype), allocatable, save :: swirl_velocity(:,:,:)
+  logical, parameter :: swirl_derived_output = .false.
 
 contains
 
@@ -524,6 +525,8 @@ contains
 
   subroutine init_swirljet (ux1,uy1,uz1,phi1)
 
+    use navier, only : pre_correc, calc_divu_constraint, solve_poisson, cor_vel
+    use var, only : rho1, drho1, ep1, pp3, divu3, px1, py1, pz1
     USE decomp_2d_io
     USE variables
     USE param
@@ -538,6 +541,14 @@ contains
     integer :: i, j, k, ii, is, code
     real(mytype) :: y, z, r, theta
     real(mytype) :: ratio, um, rm, delta
+
+    if (iin.eq.4.and.irestart.eq.0) then
+       if (ilmn.or.ivarcoeff.or.iibm.ne.0.or.nclx1.ne.2.or.nclxn.ne.2.or. &
+            ncly1.ne.0.or.nclyn.ne.0.or.nclz1.ne.0.or.nclzn.ne.0) then
+          call decomp_2d_abort(1, 'Swirl file-inlet initialization requires incompressible flow, '// &
+               'no IBM, x Dirichlet and periodic y/z')
+       endif
+    endif
 
     call validate_swirljet_radii()
     call load_swirljet_inlet()
@@ -627,6 +638,25 @@ contains
        enddo
     endif
 
+    if (iin.eq.4.and.irestart.eq.0) then
+       ! Complete u^0 before its first use by either transport equation.
+       ! No physical time is advanced and the convective outflow is not called.
+       itime = 0; itr = 1
+       call inflow(phi1)
+       bxxn = bxx1 ! Compatible normal flux for the extruded initial plane.
+       bxyn = uy1(nx,:,:); bxzn = uz1(nx,:,:)
+       ! Reuse the normal boundary compensation and pressure projection.
+       call pre_correc(ux1,uy1,uz1,ep1)
+       call calc_divu_constraint(divu3,rho1,phi1)
+       call solve_poisson(pp3,px1,py1,pz1,rho1,ux1,uy1,uz1,ep1,drho1,divu3)
+       call cor_vel(ux1,uy1,uz1,px1,py1,pz1)
+       ! Retain projected u^0, but discard the artificial startup pressure history.
+       pp3 = zero; px1 = zero; py1 = zero; pz1 = zero
+       dpdyx1 = zero; dpdzx1 = zero
+       dpdyxn = zero; dpdzxn = zero
+       call postprocess_swirljet(ux1,uy1,uz1,pp3,phi1,ep1)
+    endif
+
 #ifdef DEBG
     if (nrank .eq. 0) write(*,*) '# init end ok'
 #endif
@@ -636,6 +666,8 @@ contains
 
   subroutine postprocess_swirljet (ux1,uy1,uz1,pp3,phi1,ep1)
 
+    use mpi
+    use, intrinsic :: iso_fortran_env, only : int64
     use var, ONLY : nzmsize
     implicit none
 
@@ -643,7 +675,107 @@ contains
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
     real(mytype), intent(in), dimension(ph1%zst(1):ph1%zen(1),ph1%zst(2):ph1%zen(2),nzmsize,npress) :: pp3
 
+    real(mytype), allocatable :: sdiv(:,:,:)
+    real(mytype) :: local(3), global(3), extrema(4), bounds(4), weight, sample_time
+    logical :: last_even
+    integer :: i, j, k, is, code, unit, status, close_status
+    integer(int64) :: bytes
+
+    if (ipost.eq.0.or.iscalar.eq.0.or.iprocessing.le.0) return
+    if (mod(itime,iprocessing).ne.0) return
+    allocate(sdiv(xsize(1),xsize(2),xsize(3)))
+    if (itime.eq.0) then
+       sample_time = t0+real(itime0,mytype)*dt
+    else
+       sample_time = t
+    endif
+    status = 0
+    if (nrank.eq.0) then
+       open(newunit=unit,file='swirl_scalar_stats.csv',status='unknown',position='append', &
+            action='write',iostat=status)
+       if (status.eq.0) then
+          inquire(unit=unit,size=bytes,iostat=status)
+          if (status.eq.0) then
+             if (bytes.eq.0) write(unit,'(a)',iostat=status) &
+                  'step,time,scalar,min,max,below0_fraction,above1_fraction,div_min,div_max'
+          endif
+       endif
+    endif
+    call MPI_BCAST(status,1,MPI_INTEGER,0,MPI_COMM_WORLD,code)
+    if (status.ne.0) call decomp_2d_abort(1,'Cannot open swirl_scalar_stats.csv')
+    do is=1,numscalar
+       if (is.eq.1) then
+          call scalar_divergence_swirljet(ux1,uy1,uz1,sc_even(is),sdiv)
+       else if (sc_even(is).neqv.last_even) then
+          call scalar_divergence_swirljet(ux1,uy1,uz1,sc_even(is),sdiv)
+       endif
+       last_even = sc_even(is)
+       local = zero
+       extrema = huge(one)
+       do k=1,xsize(3)
+          do j=1,xsize(2)
+             do i=1,xsize(1)
+                weight = one
+                if (i.eq.1.or.i.eq.nx) weight = half
+                extrema(1) = min(extrema(1),phi1(i,j,k,is))
+                extrema(2) = min(extrema(2),-phi1(i,j,k,is))
+                extrema(3) = min(extrema(3),sdiv(i,j,k))
+                extrema(4) = min(extrema(4),-sdiv(i,j,k))
+                if (phi1(i,j,k,is).lt.zero) local(1) = local(1)+weight
+                if (phi1(i,j,k,is).gt.one) local(2) = local(2)+weight
+             enddo
+          enddo
+       enddo
+       local(3) = real(nx-1,mytype)*real(xsize(2),mytype)*real(xsize(3),mytype)
+       call MPI_ALLREDUCE(local,global,3,real_type,MPI_SUM,MPI_COMM_WORLD,code)
+       call MPI_ALLREDUCE(extrema,bounds,4,real_type,MPI_MIN,MPI_COMM_WORLD,code)
+       if (nrank.eq.0.and.status.eq.0) &
+            write(unit,'(i0,",",es24.16e3,",",i0,6(",",es24.16e3))',iostat=status) &
+            itime,sample_time,is,bounds(1),-bounds(2),global(1:2)/global(3),bounds(3),-bounds(4)
+    enddo
+    if (nrank.eq.0) then
+       close(unit,iostat=close_status)
+       if (status.eq.0) status = close_status
+    endif
+    call MPI_BCAST(status,1,MPI_INTEGER,0,MPI_COMM_WORLD,code)
+    if (status.ne.0) call decomp_2d_abort(1,'Cannot write/close swirl_scalar_stats.csv')
+
   end subroutine postprocess_swirljet
+
+  subroutine scalar_divergence_swirljet(ux,uy,uz,even,div)
+
+    use var, only : di1, tb1, ta2, tb2, di2, ta3, tb3, di3
+    implicit none
+    real(mytype), intent(in) :: ux(:,:,:), uy(:,:,:), uz(:,:,:)
+    real(mytype), intent(out) :: div(:,:,:)
+    logical, intent(in) :: even
+    ! Match the derivative of u*phi in scalar_transport_eq, including parity
+    ! and coefficient arrays. This is D_s.u, not the staggered pressure D_p.u.
+    if (even) then
+       call derxS(div,ux,di1,sx,ffxS,fsxS,fwxS,xsize(1),xsize(2),xsize(3),0,zero)
+    else
+       call derxS(div,ux,di1,sx,ffxpS,fsxpS,fwxpS,xsize(1),xsize(2),xsize(3),1,zero)
+    endif
+    call transpose_x_to_y(uy,ta2)
+    if (even) then
+       call deryS(tb2,ta2,di2,sy,ffyS,fsyS,fwyS,ppy,ysize(1),ysize(2),ysize(3),0,zero)
+    else
+       call deryS(tb2,ta2,di2,sy,ffypS,fsypS,fwypS,ppy,ysize(1),ysize(2),ysize(3),1,zero)
+    endif
+    call transpose_y_to_x(tb2,tb1)
+    div = div+tb1
+    call transpose_x_to_y(uz,ta2)
+    call transpose_y_to_z(ta2,ta3)
+    if (even) then
+       call derzS(tb3,ta3,di3,sz,ffzS,fszS,fwzS,zsize(1),zsize(2),zsize(3),0,zero)
+    else
+       call derzS(tb3,ta3,di3,sz,ffzpS,fszpS,fwzpS,zsize(1),zsize(2),zsize(3),1,zero)
+    endif
+    call transpose_z_to_y(tb3,tb2)
+    call transpose_y_to_x(tb2,tb1)
+    div = div+tb1
+
+  end subroutine scalar_divergence_swirljet
 
   subroutine visu_swirljet_init (visu_initialised)
 
@@ -653,6 +785,11 @@ contains
     implicit none
 
     logical, intent(out) :: visu_initialised
+
+    if (.not.swirl_derived_output) then
+       visu_initialised = .true.
+       return
+    endif
 
     call decomp_2d_register_variable(io_name, "vort", 1, 0, output2D, mytype)
     call decomp_2d_register_variable(io_name, "critq", 1, 0, output2D, mytype)
@@ -683,7 +820,10 @@ contains
     real(mytype) :: y, z, theta, tmp
     real(mytype) :: eig1, eig2, eig3
     real(mytype) :: m11, m12, m13, m22, m23, m33, trace, det, b, q, r
-    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ur, utheta
+    real(mytype), allocatable :: ur(:,:,:), utheta(:,:,:)
+
+    if (.not.swirl_derived_output) return
+    allocate(ur(xsize(1),xsize(2),xsize(3)),utheta(xsize(1),xsize(2),xsize(3)))
 
     ! Write vorticity as an example of post processing
 

@@ -22,7 +22,7 @@ This case simulates an axial core jet surrounded by a swirling annular jet on a 
 | Spatial discretization | Sixth-order compact first derivatives and hyperviscous second derivatives; `nu0nu=4`, `cnu=0.44` |
 | LES model | `ilesmod=0` |
 
-The nominal simulation duration is 20 nondimensional time units. `nvisu` controls spatial sampling, not the snapshot interval. The case-specific postprocessing hook is currently empty, so `ipost=1` does not provide integral swirl-number or momentum-budget diagnostics.
+The nominal simulation duration is 20 nondimensional time units. `nvisu` controls spatial sampling, not the snapshot interval. Scalar diagnostics use `ipost` and `iprocessing`, as described below.
 
 ## Inlet model
 
@@ -162,3 +162,13 @@ The CSV provides velocity only. The file-driven case therefore assigns geometric
 In the LES setup, `Sc(1)=Sc(2)=1`, `Ri(1)=Ri(2)=0` and `uset(1)=uset(2)=0`: no buoyancy coupling or settling is applied. The scalar equation uses `nu/Sc` with the same hyperviscous second-derivative choice as momentum. With `jles=4` no explicit `nut/Sc` SGS scalar term is added; this is not a WALE scalar model. There is no independently specified turbulent Schmidt number here.
 
 Scalar x boundaries use prescribed inflow and the case's convective outflow, while y/z remain periodic. Scalar convection retains its existing non-skew setting. No hard [0,1] clipping is enabled: monitor minima/maxima and scalar budgets, since high-order transport can overshoot. Clipping would alter scalar conservation and is not introduced by this inlet change.
+
+## Scalar startup and diagnostics
+
+For `iin=4` cold starts, initialization applies the existing `pre_correc -> calc_divu_constraint -> solve_poisson -> cor_vel` sequence once before the first transport RHS. The projected initial velocity is retained, while the artificial pressure, velocity-correction gradients and x-boundary pressure-gradient histories are cleared: this projection advances no physical time. Normal time stepping subsequently establishes its own pressure history. The initial normal outlet flux is matched to the inlet. There is no mask or additional iterative solver, and no requirement that the corrected inlet equal the CSV values to machine precision. The normal time loop and random initialization are unchanged.
+
+With `ipost=1`, `iprocessing` controls sampling after complete time steps; the LES input uses 10, and cold-start step 0 is also recorded. `ipost=0` or `iprocessing<=0` disables statistics. `ilist`, `ioutput` and `icheckpoint` retain their separate roles.
+
+Rank zero appends `swirl_scalar_stats.csv`: step, time, scalar index, minimum/maximum, volume fractions strictly below 0 and above 1, and raw scalar-operator divergence minimum/maximum. Fractions use full-grid trapezoidal x weights and periodic y/z weights. The divergence uses the actual `derxS/deryS/derzS` flux derivatives and scalar parity, without subtracting a reference value. Both LES scalars share this calculation. Statistics assume uniform x-Dirichlet/y-z-periodic grids and do not clip fields. Use a new run directory when changing the CSV column format.
+
+The case constant `swirl_derived_output=.false.` disables vort/critq/ur/utheta calculations and output; primary fields and checkpoints remain available. Convective scalar transport remains the default. These changes do not provide strict scalar boundedness; complete-solver MPI startup validation remains outstanding.
