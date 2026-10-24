@@ -667,7 +667,6 @@ contains
   subroutine postprocess_swirljet (ux1,uy1,uz1,pp3,phi1,ep1)
 
     use mpi
-    use, intrinsic :: iso_fortran_env, only : int64
     use var, ONLY : nzmsize
     implicit none
 
@@ -675,41 +674,22 @@ contains
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
     real(mytype), intent(in), dimension(ph1%zst(1):ph1%zen(1),ph1%zst(2):ph1%zen(2),nzmsize,npress) :: pp3
 
-    real(mytype), allocatable :: sdiv(:,:,:)
-    real(mytype) :: local(3), global(3), extrema(4), bounds(4), weight, sample_time
-    logical :: last_even
+    real(mytype), parameter :: tolerance = 1.e-3_mytype
+    real(mytype) :: local(5), global(5), extrema(2), bounds(2), weight, sample_time, value
     integer :: i, j, k, is, code, unit, status, close_status
-    integer(int64) :: bytes
 
     if (ipost.eq.0.or.iscalar.eq.0.or.iprocessing.le.0) return
     if (mod(itime,iprocessing).ne.0) return
-    allocate(sdiv(xsize(1),xsize(2),xsize(3)))
     if (itime.eq.0) then
        sample_time = t0+real(itime0,mytype)*dt
     else
        sample_time = t
     endif
+    ! Separate files keep the new schema distinct from historical statistics.
+    call open_scalar_csv_swirljet(unit,'swirl_scalar_bounds.csv', &
+         'step,time,scalar,min,max,undershoot_fraction,overshoot_fraction,undershoot_integral,overshoot_integral')
     status = 0
-    if (nrank.eq.0) then
-       open(newunit=unit,file='swirl_scalar_stats.csv',status='unknown',position='append', &
-            action='write',iostat=status)
-       if (status.eq.0) then
-          inquire(unit=unit,size=bytes,iostat=status)
-          if (status.eq.0) then
-             if (bytes.eq.0) write(unit,'(a)',iostat=status) &
-                  'step,time,scalar,min,max,below0_fraction,above1_fraction,div_min,div_max'
-          endif
-       endif
-    endif
-    call MPI_BCAST(status,1,MPI_INTEGER,0,MPI_COMM_WORLD,code)
-    if (status.ne.0) call decomp_2d_abort(1,'Cannot open swirl_scalar_stats.csv')
     do is=1,numscalar
-       if (is.eq.1) then
-          call scalar_divergence_swirljet(ux1,uy1,uz1,sc_even(is),sdiv)
-       else if (sc_even(is).neqv.last_even) then
-          call scalar_divergence_swirljet(ux1,uy1,uz1,sc_even(is),sdiv)
-       endif
-       last_even = sc_even(is)
        local = zero
        extrema = huge(one)
        do k=1,xsize(3)
@@ -717,30 +697,132 @@ contains
              do i=1,xsize(1)
                 weight = one
                 if (i.eq.1.or.i.eq.nx) weight = half
-                extrema(1) = min(extrema(1),phi1(i,j,k,is))
-                extrema(2) = min(extrema(2),-phi1(i,j,k,is))
-                extrema(3) = min(extrema(3),sdiv(i,j,k))
-                extrema(4) = min(extrema(4),-sdiv(i,j,k))
-                if (phi1(i,j,k,is).lt.zero) local(1) = local(1)+weight
-                if (phi1(i,j,k,is).gt.one) local(2) = local(2)+weight
+                value = phi1(i,j,k,is)
+                extrema(1) = min(extrema(1),value)
+                extrema(2) = min(extrema(2),-value)
+                if (value.lt.-tolerance) local(1) = local(1)+weight
+                if (value.gt.one+tolerance) local(2) = local(2)+weight
+                local(3) = local(3)+weight*max(-value,zero)
+                local(4) = local(4)+weight*max(value-one,zero)
              enddo
           enddo
        enddo
-       local(3) = real(nx-1,mytype)*real(xsize(2),mytype)*real(xsize(3),mytype)
-       call MPI_ALLREDUCE(local,global,3,real_type,MPI_SUM,MPI_COMM_WORLD,code)
-       call MPI_ALLREDUCE(extrema,bounds,4,real_type,MPI_MIN,MPI_COMM_WORLD,code)
+       local(5) = real(nx-1,mytype)*real(xsize(2),mytype)*real(xsize(3),mytype)
+       call MPI_ALLREDUCE(local,global,5,real_type,MPI_SUM,MPI_COMM_WORLD,code)
+       call MPI_ALLREDUCE(extrema,bounds,2,real_type,MPI_MIN,MPI_COMM_WORLD,code)
        if (nrank.eq.0.and.status.eq.0) &
             write(unit,'(i0,",",es24.16e3,",",i0,6(",",es24.16e3))',iostat=status) &
-            itime,sample_time,is,bounds(1),-bounds(2),global(1:2)/global(3),bounds(3),-bounds(4)
+            itime,sample_time,is,bounds(1),-bounds(2),global(1:2)/global(5),global(3:4)*dx*dy*dz
     enddo
     if (nrank.eq.0) then
        close(unit,iostat=close_status)
        if (status.eq.0) status = close_status
     endif
     call MPI_BCAST(status,1,MPI_INTEGER,0,MPI_COMM_WORLD,code)
-    if (status.ne.0) call decomp_2d_abort(1,'Cannot write/close swirl_scalar_stats.csv')
+    if (status.ne.0) call decomp_2d_abort(1,'Cannot write/close swirl_scalar_bounds.csv')
+
+    ! Bounds every iprocessing steps; costly flux derivatives only every tenth sample.
+    if (mod(itime/iprocessing,10).eq.0) &
+         call write_scalar_divergence_swirljet(ux1,uy1,uz1,sample_time)
 
   end subroutine postprocess_swirljet
+
+  subroutine open_scalar_csv_swirljet(unit,filename,header)
+
+    use mpi
+    use, intrinsic :: iso_fortran_env, only : int64
+    implicit none
+    integer, intent(out) :: unit
+    character(len=*), intent(in) :: filename, header
+    integer :: status, code
+    integer(int64) :: bytes
+
+    unit = 0
+    status = 0
+    if (nrank.eq.0) then
+       open(newunit=unit,file=filename,status='unknown',position='append',action='write',iostat=status)
+       if (status.eq.0) then
+          inquire(unit=unit,size=bytes,iostat=status)
+          if (status.eq.0) then
+             if (bytes.eq.0) write(unit,'(a)',iostat=status) header
+          endif
+       endif
+    endif
+    call MPI_BCAST(status,1,MPI_INTEGER,0,MPI_COMM_WORLD,code)
+    if (status.ne.0) call decomp_2d_abort(1,'Cannot open '//filename)
+
+  end subroutine open_scalar_csv_swirljet
+
+  subroutine write_scalar_divergence_swirljet(ux,uy,uz,sample_time)
+
+    use mpi
+    use, intrinsic :: ieee_arithmetic, only : ieee_value, ieee_quiet_nan
+    implicit none
+    real(mytype), intent(in) :: ux(:,:,:), uy(:,:,:), uz(:,:,:), sample_time
+    real(mytype), allocatable :: div(:,:,:)
+    real(mytype) :: local(2,2), global(2,2), extrema(2,2), bounds(2,2), rms(2), weight
+    logical :: last_even
+    integer :: i, j, k, is, region, unit, status, close_status, code
+    character(len=8), parameter :: regions(2) = ['all     ','interior']
+
+    allocate(div(xsize(1),xsize(2),xsize(3)))
+    call open_scalar_csv_swirljet(unit,'swirl_scalar_divergence.csv', &
+         'step,time,scalar,region,min,max,rms,volume')
+    status = 0
+    last_even = .false.
+    do is=1,numscalar
+       if (is.eq.1.or.(sc_even(is).neqv.last_even)) then
+          call scalar_divergence_swirljet(ux,uy,uz,sc_even(is),div)
+          local = zero
+          extrema = huge(one)
+          do k=1,xsize(3)
+             do j=1,xsize(2)
+                do i=1,xsize(1)
+                   weight = one
+                   if (i.eq.1.or.i.eq.nx) weight = half
+                   local(1,1) = local(1,1)+weight*div(i,j,k)**2
+                   local(2,1) = local(2,1)+weight
+                   extrema(1,1) = min(extrema(1,1),div(i,j,k))
+                   extrema(2,1) = min(extrema(2,1),-div(i,j,k))
+                   ! Omit four x planes per end; y/z remain fully periodic.
+                   if (i.ge.5.and.i.le.nx-4) then
+                      local(1,2) = local(1,2)+div(i,j,k)**2
+                      local(2,2) = local(2,2)+one
+                      extrema(1,2) = min(extrema(1,2),div(i,j,k))
+                      extrema(2,2) = min(extrema(2,2),-div(i,j,k))
+                   endif
+                enddo
+             enddo
+          enddo
+          call MPI_ALLREDUCE(local,global,4,real_type,MPI_SUM,MPI_COMM_WORLD,code)
+          call MPI_ALLREDUCE(extrema,bounds,4,real_type,MPI_MIN,MPI_COMM_WORLD,code)
+          do region=1,2
+             rms(region) = ieee_value(zero,ieee_quiet_nan)
+             if (global(2,region).gt.zero) then
+                rms(region) = sqrt(global(1,region)/global(2,region))
+             else
+                bounds(:,region) = rms(region)
+             endif
+          enddo
+       endif
+       last_even = sc_even(is)
+       if (nrank.eq.0.and.status.eq.0) then
+          do region=1,2
+             write(unit,'(i0,",",es24.16e3,",",i0,",",a,4(",",es24.16e3))',iostat=status) &
+                  itime,sample_time,is,trim(regions(region)),bounds(1,region),-bounds(2,region), &
+                  rms(region),global(2,region)*dx*dy*dz
+             if (status.ne.0) exit
+          enddo
+       endif
+    enddo
+    if (nrank.eq.0) then
+       close(unit,iostat=close_status)
+       if (status.eq.0) status = close_status
+    endif
+    call MPI_BCAST(status,1,MPI_INTEGER,0,MPI_COMM_WORLD,code)
+    if (status.ne.0) call decomp_2d_abort(1,'Cannot write/close swirl_scalar_divergence.csv')
+
+  end subroutine write_scalar_divergence_swirljet
 
   subroutine scalar_divergence_swirljet(ux,uy,uz,even,div)
 

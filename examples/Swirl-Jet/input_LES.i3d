@@ -1,7 +1,8 @@
 ! Coaxial swirling jet LES with the steady three-component CSV-derived inlet.
 ! Reference scales: Di=0.015 m, Ub=0.441409596 m/s, source plane x=0.002 m.
 ! Measured Re=7447.856; re=7450 differs by approximately 0.029%.
-! Generate swirl_inlet.dat with prepare_inlet.py before starting.
+! Prepare swirl_inlet.dat once from this baseline with prepare_inlet.py.
+! Reuse the same processed table for all grid comparisons; do not regenerate per grid.
 ! This full-size cold-start setup has not been validated by a solver run.
 
 !===================
@@ -46,7 +47,7 @@ inflow_noise = 0.0    ! Turbulence intensity (1=100%) !! Inflow condition
 ! Time stepping
 dt = 0.001            ! Time step
 ifirst = 1            ! First iteration
-ilast = 2000          ! Last iteration; increase for flow-through/statistical convergence
+ilast = 5000          ! Last iteration; increase for flow-through/statistical convergence
 
 ! Enable modelling tools
 ilesmod=4             ! Nonzero enables LES; jles=4 selects iSVV
@@ -85,7 +86,7 @@ cnu = 0.44            ! Relative extra viscosity at k_m=2*pi/3
 ! Basic I/O
 irestart = 0          ! Cold start; file plane is extruded along x initially
 inflowpath = './'     ! Directory containing swirl_inlet.dat (iin=4)
-icheckpoint = 2000    ! Frequency for writing backup file
+icheckpoint = 5000    ! Frequency for writing backup file
 ioutput = 1000        ! Frequency for visualization
 iprocessing = 10      ! CSV sampling every 10 complete time steps (also at cold-start step 0)
 ilist = 1             ! Frequency for writing on screen
