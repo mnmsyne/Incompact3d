@@ -13,8 +13,8 @@
 itype = 733
 
 ! Domain decomposition
-p_row=0               ! Row partition
-p_col=0               ! Column partition
+p_row=6               ! Fixed row partition for 48 MPI ranks
+p_col=8               ! Fixed column partition for 48 MPI ranks
 
 ! Mesh
 nx=601                ! X-direction nodes

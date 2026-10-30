@@ -561,6 +561,7 @@ contains
     if (iin.ne.0) then
        call system_clock(count=code)
        if (iin.eq.2) code=0
+       if (iin.eq.4) code=42 ! Reproducible CSV-inlet initial noise; retain rank-specific seeds.
        call random_seed(size = ii)
        call random_seed(put = code+63946*(nrank+1)*(/ (i - 1, i = 1, ii) /))
 
