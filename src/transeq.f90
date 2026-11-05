@@ -1062,6 +1062,7 @@ contains
     use les
     use var, only : sgsphi1, nut1
     USE param, only : zero
+    use scalar_fct, only : scalar_fct_rhs
 
     implicit none
 
@@ -1079,7 +1080,11 @@ contains
     !!=====================================================================
     !! XXX It is assumed that ux,uy,uz are already updated in all pencils!
     !!=====================================================================
+    if (scalar_flux_active) call scalar_fct_rhs(phi1,ux1,uy1,uz1,dphi1)
+
     do is = 1, numscalar
+
+       if (scalar_scheme(is)=='div'.or.scalar_scheme(is)=='fct') cycle
 
        if (is.ne.primary_species) then
           !! For mass fractions enforce primary species Y_p = 1 - sum_s Y_s

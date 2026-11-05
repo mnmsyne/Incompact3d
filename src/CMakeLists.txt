@@ -48,6 +48,9 @@ add_executable(xcompact3d
                     particle.f90
                     poisson.f90
                     probes.f90
+                    scalar_flux.f90
+                    scalar_flux_mapping.f90
+                    scalar_fct.f90
                     schemes.f90
                     statistics.f90
 		    stretching.f90

@@ -15,6 +15,7 @@ subroutine parameter(input_i3d)
   use mpi
   
   use iso_fortran_env
+  use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
 
   use param
   use variables
@@ -40,6 +41,8 @@ subroutine parameter(input_i3d)
   character(len=80), intent(in) :: input_i3d
   real(mytype) :: theta, cfl,cf2
   integer :: longueur ,impi,j, is, total, ierr
+  logical, allocatable :: legacy_sc_skew(:), explicit_sc_skew(:), explicit_scalar_scheme(:)
+  character(len=8), allocatable :: input_scalar_scheme(:)
 
   NAMELIST /BasicParam/ p_row, p_col, nx, ny, nz, istret, beta, xlx, yly, zlz, &
        itype, iin, re, u1, u2, init_noise, inflow_noise, &
@@ -62,6 +65,9 @@ subroutine parameter(input_i3d)
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
        scalar_lbound, scalar_ubound, sc_even, sc_skew, &
+       scalar_scheme, scalar_fct_lower, scalar_fct_upper, &
+       scalar_mapping_tol, scalar_mapping_flux_tol, scalar_mapping_maxiter, scalar_mapping_max_correction, &
+       scalar_mapping_reference_velocity, scalar_mapping_local_velocity_floor, scalar_mapping_near_x, &
        alpha_sc, beta_sc, g_sc, Tref
   NAMELIST /LESModel/ jles, smagcst, smagwalldamp, nSmag, walecst, maxdsmagcst, iconserv
   NAMELIST /ThetaDotModel/ jtheta_dot,jthickness,Method_FT,K_theta,H_12
@@ -167,6 +173,10 @@ subroutine parameter(input_i3d)
      ! Skew-symmetric convection of scalars, off by default
      allocate(sc_skew(numscalar))
      sc_skew(:) = .false.
+     allocate(scalar_scheme(numscalar))
+     scalar_scheme(:) = ''
+     allocate(legacy_sc_skew(numscalar), explicit_sc_skew(numscalar))
+     allocate(input_scalar_scheme(numscalar), explicit_scalar_scheme(numscalar))
 
      allocate(scalar_lbound(numscalar), scalar_ubound(numscalar))
      scalar_lbound(:) = -huge(one)
@@ -204,6 +214,47 @@ subroutine parameter(input_i3d)
   endif
   if (numscalar.ne.0) then
      read(10, nml=ScalarParam); rewind(10)
+     ! Distinguish explicitly supplied legacy false from an omitted value:
+     ! supplied elements survive a second read from the opposite default.
+     legacy_sc_skew = sc_skew
+     input_scalar_scheme = scalar_scheme
+     sc_skew = .true.
+     scalar_scheme = '__unset'
+     read(10, nml=ScalarParam); rewind(10)
+     explicit_sc_skew = legacy_sc_skew.eqv.sc_skew
+     explicit_scalar_scheme = input_scalar_scheme.eq.scalar_scheme
+     sc_skew = legacy_sc_skew
+     scalar_scheme = input_scalar_scheme
+     do is=1,numscalar
+        scalar_scheme(is)=adjustl(scalar_scheme(is))
+        do j=1,len(scalar_scheme(is))
+           impi=iachar(scalar_scheme(is)(j:j))
+           if (impi.ge.iachar('A').and.impi.le.iachar('Z')) &
+                scalar_scheme(is)(j:j)=achar(impi+iachar('a')-iachar('A'))
+        enddo
+        if (.not.explicit_scalar_scheme(is)) then
+           scalar_scheme(is)='conv'
+           if (legacy_sc_skew(is)) scalar_scheme(is)='skew'
+        else
+           select case (trim(scalar_scheme(is)))
+           case ('conv')
+              if (explicit_sc_skew(is).and.legacy_sc_skew(is)) &
+                   call scalar_input_abort('scalar_scheme=conv conflicts with explicit sc_skew=true')
+           case ('skew')
+              if (explicit_sc_skew(is).and..not.legacy_sc_skew(is)) &
+                   call scalar_input_abort('scalar_scheme=skew conflicts with explicit sc_skew=false')
+           case ('div','fct')
+              if (explicit_sc_skew(is)) &
+                   call scalar_input_abort('Do not combine scalar_scheme=div/fct with explicit legacy sc_skew')
+           case default
+              if (nrank.eq.0) write(*,*) 'Unknown scalar_scheme for species ',is,': ',trim(scalar_scheme(is))
+              call scalar_input_abort('scalar_scheme must be conv, div, skew or fct')
+           end select
+        endif
+        sc_skew(is)=scalar_scheme(is).eq.'skew'
+     enddo
+     scalar_flux_active=any(scalar_scheme.eq.'div'.or.scalar_scheme.eq.'fct')
+     deallocate(legacy_sc_skew,explicit_sc_skew,input_scalar_scheme,explicit_scalar_scheme)
      if (nz==1) then
         nclzS1 = 0
         nclzSn = 0
@@ -268,6 +319,68 @@ subroutine parameter(input_i3d)
   ! read(10, nml=TurbulenceWallModel)
   read(10, nml=CASE); rewind(10) !! Read case-specific variables
   close(10)
+
+  ! The new path owns only explicit passive-scalar transport. Fail before
+  ! allocation/advancement for combinations whose exchanges are not budgeted.
+  if (scalar_flux_active) then
+     if (itype.ne.itype_swirljet.or.iscalar.ne.1.or.numscalar.lt.1) &
+          call scalar_input_abort('Conservative scalar transport currently requires passive Swirl-Jet scalars')
+     if (ilmn.or.ivarcoeff.or.imultispecies) &
+          call scalar_input_abort('Conservative scalar transport does not support variable density or multispecies')
+     if (itimescheme.ne.5.or.iimplicit.ne.0.or.istret.ne.0) &
+          call scalar_input_abort('Conservative scalar transport requires explicit native RK3 on a uniform grid')
+     if (ifirstder.ne.4.or.isecondder.ne.5) &
+          call scalar_input_abort('Conservative scalar transport requires sixth-order compact D1 and iSVV D2')
+     if (nclx1.ne.2.or.nclxn.ne.2.or.nclxS1.ne.2.or.nclxSn.ne.2.or. &
+          ncly1.ne.0.or.nclyn.ne.0.or.nclz1.ne.0.or.nclzn.ne.0.or. &
+          nclyS1.ne.0.or.nclySn.ne.0.or.nclzS1.ne.0.or.nclzSn.ne.0) &
+          call scalar_input_abort('Conservative scalar transport requires open x and periodic y/z boundaries')
+     if (nx.lt.10.or.ny.lt.8.or.nz.lt.8) &
+          call scalar_input_abort('Conservative scalar transport requires nx >= 10 and ny,nz >= 8')
+     if (iibm.ne.0.or.ifilter.ne.0) &
+          call scalar_input_abort('Conservative scalar transport does not budget immersed boundaries or filters')
+     if (any(ri.ne.zero).or.any(uset.ne.zero).or.any(massfrac)) &
+          call scalar_input_abort('Conservative scalar transport requires no scalar feedback, settling or mass fractions')
+     if (ilesmod.ne.0) then
+        if (jles.ne.4) call scalar_input_abort('Conservative scalar transport supports only the embedded iSVV model')
+     endif
+     if (.not.all(ieee_is_finite(sc)).or..not.all(ieee_is_finite(cp))) &
+          call scalar_input_abort('Conservative scalar transport requires finite Sc and inlet amplitudes')
+     if (any(sc.le.zero)) call scalar_input_abort('Conservative scalar transport requires positive Sc')
+     if (.not.ieee_is_finite(scalar_fct_lower).or..not.ieee_is_finite(scalar_fct_upper)) &
+          call scalar_input_abort('Scalar FCT bounds must be finite')
+     if (scalar_fct_lower.ge.scalar_fct_upper) call scalar_input_abort('Scalar FCT lower bound must be below upper bound')
+     if (.not.ieee_is_finite(scalar_mapping_tol).or..not.ieee_is_finite(scalar_mapping_flux_tol)) &
+          call scalar_input_abort('Scalar mapping tolerances must be finite')
+     if (scalar_mapping_tol.le.zero.or.scalar_mapping_flux_tol.le.zero.or.scalar_mapping_maxiter.lt.1) &
+          call scalar_input_abort('Scalar mapping tolerances and iteration limit must be positive')
+     if (.not.ieee_is_finite(scalar_mapping_max_correction)) &
+          call scalar_input_abort('Set explicit scalar_mapping_max_correction to a finite positive physical budget below huge')
+     if (scalar_mapping_max_correction.le.zero.or.scalar_mapping_max_correction.ge.huge(one)) &
+          call scalar_input_abort('Set explicit scalar_mapping_max_correction to a finite positive physical budget below huge')
+     if (.not.ieee_is_finite(scalar_mapping_reference_velocity)) &
+          call scalar_input_abort('Set explicit scalar_mapping_reference_velocity to a finite positive normalization velocity')
+     if (scalar_mapping_reference_velocity.le.zero) &
+          call scalar_input_abort('Set explicit scalar_mapping_reference_velocity to a finite positive normalization velocity')
+     if (.not.ieee_is_finite(scalar_mapping_local_velocity_floor)) &
+          call scalar_input_abort('scalar_mapping_local_velocity_floor must be finite')
+     if (scalar_mapping_local_velocity_floor.eq.-one) &
+          scalar_mapping_local_velocity_floor=0.01_mytype*scalar_mapping_reference_velocity
+     if (scalar_mapping_local_velocity_floor.le.zero) &
+          call scalar_input_abort('scalar_mapping_local_velocity_floor must be positive or omitted for the default')
+     if (.not.ieee_is_finite(dt).or..not.ieee_is_finite(re).or..not.ieee_is_finite(nu0nu).or. &
+          .not.ieee_is_finite(cnu)) call scalar_input_abort('Conservative scalar transport requires finite coefficients')
+     if (dt.le.zero.or.re.le.zero) call scalar_input_abort('Conservative scalar transport requires positive dt and Re')
+     if (.not.ieee_is_finite(xlx).or..not.ieee_is_finite(yly).or..not.ieee_is_finite(zlz)) &
+          call scalar_input_abort('Conservative scalar transport requires finite domain lengths')
+     if (xlx.le.zero.or.yly.le.zero.or.zlz.le.zero) &
+          call scalar_input_abort('Conservative scalar transport requires positive domain lengths')
+     if (.not.ieee_is_finite(scalar_mapping_near_x)) &
+          call scalar_input_abort('scalar_mapping_near_x must be finite')
+     if (scalar_mapping_near_x.eq.-one) scalar_mapping_near_x=0.25_mytype*xlx
+     if (scalar_mapping_near_x.le.zero.or.scalar_mapping_near_x.ge.xlx) &
+          call scalar_input_abort('scalar_mapping_near_x must lie strictly between zero and Lx')
+  endif
 
   ! allocate(sc(numscalar),cp(numscalar),ri(numscalar),group(numscalar))
 
@@ -550,8 +663,21 @@ subroutine parameter(input_i3d)
      if (iscalar==0) write(*,"(' Scalar                 : ',A17)") "off"
      if (iscalar==1) write(*,"(' Scalar                 : ',A17)") "on"
      write(*,"(' numscalar              : ',I17)") numscalar
+     if (scalar_flux_active) then
+        write(*,"(' scalar FCT interval    : ',2ES17.8)") scalar_fct_lower, scalar_fct_upper
+        write(*,"(' scalar mapping tolerances : ',2ES17.8)") scalar_mapping_tol, scalar_mapping_flux_tol
+        write(*,"(' scalar mapping maxiter : ',I17)") scalar_mapping_maxiter
+        write(*,"(' scalar mapping deltaU budget : ',ES17.8)") scalar_mapping_max_correction
+        write(*,"(' scalar mapping reference velocity : ',ES17.8)") scalar_mapping_reference_velocity
+        write(*,"(' scalar mapping diagnostic velocity floor : ',ES17.8)") scalar_mapping_local_velocity_floor
+        write(*,"(' scalar mapping near-field x cutoff : ',ES17.8)") scalar_mapping_near_x
+        write(*,*) 'The local velocity floor normalizes diagnostics only; it does not relax the physical deltaU budget.'
+        write(*,*) 'Scalar inlet nodes are prescribed external data; active control volumes start at x node 2.'
+        write(*,*) 'Scalar physical outlet uses the new flux path; velocity boundary treatment is unchanged.'
+     endif
      if (iscalar.eq.1) then
        do is=1, numscalar
+          write(*,"(' scalar_scheme(',I2,')     : ',A8)") is,scalar_scheme(is)
           write(*,"(' Schmidt number sc(',I2,')  : ',F17.8)") is, sc(is)
           write(*,"(' Richardson n.  ri(',I2,')  : ',F17.8)") is, ri(is)
           if (scalar_lbound(is).gt.-huge(one)) then
@@ -669,6 +795,23 @@ subroutine parameter(input_i3d)
 #endif
 
   return
+
+contains
+
+  ! parameter() precedes decomp_2d_init: its communicator is not available
+  ! yet, whereas MPI_COMM_WORLD was initialized by the main program.
+  subroutine scalar_input_abort(message)
+    character(len=*), intent(in) :: message
+    integer :: world_rank, local_ierr
+
+    world_rank = -1
+    call MPI_COMM_RANK(MPI_COMM_WORLD,world_rank,local_ierr)
+    if (world_rank.eq.0) write(*,*) 'Invalid scalar input: ',trim(message)
+    flush(output_unit)
+    call MPI_ABORT(MPI_COMM_WORLD,1,local_ierr)
+    stop 1
+  end subroutine scalar_input_abort
+
 end subroutine parameter
 
 !###########################################################################
@@ -711,6 +854,16 @@ subroutine parameter_defaults()
   ipinter=3
   beta = 0
   iscalar = 0
+  scalar_flux_active = .false.
+  scalar_fct_lower = -0.01_mytype
+  scalar_fct_upper = 1.01_mytype
+  scalar_mapping_tol = 1.e-10_mytype
+  scalar_mapping_flux_tol = 1.e-10_mytype
+  scalar_mapping_maxiter = 500
+  scalar_mapping_max_correction = -one
+  scalar_mapping_reference_velocity = -one
+  scalar_mapping_local_velocity_floor = -one
+  scalar_mapping_near_x = -one
   cont_phi = 0
   filepath = './data/'
   irestart = 0

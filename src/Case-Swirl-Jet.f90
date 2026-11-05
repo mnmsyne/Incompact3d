@@ -14,7 +14,7 @@ module swirljet
 
   PRIVATE !! All functions/subroutines private by default
   PUBLIC :: init_swirljet, boundary_conditions_swirljet, postprocess_swirljet, &
-            visu_swirljet, visu_swirljet_init, scalar_inlet_swirljet
+            visu_swirljet, visu_swirljet_init, scalar_inlet_swirljet, scalar_inlet_values_swirljet
 
   type :: inlet_table
      integer :: ny = 0, nz = 0
@@ -415,14 +415,33 @@ contains
 
   subroutine scalar_inlet_swirljet(phi, dphi)
 
-    use ibm_param, only : rai, rao
-
     real(mytype), intent(inout) :: phi(xsize(1),xsize(2),xsize(3),numscalar)
     real(mytype), intent(inout), optional :: dphi(xsize(1),xsize(2),xsize(3),ntime,numscalar)
+    real(mytype) :: inlet(xsize(2),xsize(3),numscalar)
+
+    if (iscalar.eq.1) then
+       call scalar_inlet_values_swirljet(inlet)
+       phi(1,:,:,:) = inlet
+
+       ! The inlet is prescribed data, including in the conservative path,
+       ! whose active transport unknowns start at node 2.
+       if (present(dphi)) dphi(1,:,:,:,:) = zero
+    endif
+
+  end subroutine scalar_inlet_swirljet
+
+  ! Generate the same prescribed profile independently of state/history
+  ! mutation, so scalar transport can use it as physical boundary data.
+  subroutine scalar_inlet_values_swirljet(inlet)
+
+    use ibm_param, only : rai, rao
+
+    real(mytype), intent(out) :: inlet(xsize(2),xsize(3),numscalar)
     real(mytype), parameter :: delta = 0.1_mytype
     real(mytype) :: y, z, r
     integer :: j, k, is
 
+    inlet = zero
     if (iscalar.eq.1) then
        do is=1, numscalar
           do k=1,xsize(3)
@@ -432,20 +451,17 @@ contains
                 if (istret.ne.0) y=yp(j+xstart(2)-1)-yly/2.
                 r=sqrt(y**two+z**two)
                 if (mod(is,2).eq.1) then
-                   phi(1,j,k,is)=cp(is)*(one-erf((r-rai)/delta))/two
+                   inlet(j,k,is)=cp(is)*(one-erf((r-rai)/delta))/two
                 else
-                   phi(1,j,k,is)=cp(is)*(erf((r-rai)/delta)-erf((r-rao)/delta))/two
+                   inlet(j,k,is)=cp(is)*(erf((r-rai)/delta)-erf((r-rao)/delta))/two
                 endif
              enddo
           enddo
        enddo
 
-       ! A steady Dirichlet inlet has zero time derivative, including the
-       ! stored AB/RK history. Do not retain RHS values from before enforcement.
-       if (present(dphi)) dphi(1,:,:,:,:) = zero
     endif
 
-  end subroutine scalar_inlet_swirljet
+  end subroutine scalar_inlet_values_swirljet
 
   subroutine outflow (ux,uy,uz,phi)
 
@@ -456,7 +472,7 @@ contains
 
     implicit none
 
-    integer :: j,k,code
+    integer :: j,k,code,is
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
     real(mytype) :: udx,udy,udz,uddx,uddy,uddz,cx,uxmin,uxmax
@@ -510,11 +526,22 @@ contains
           cx=uxmax*gdt(itr)*udx
        endif
 
-       do k=1,xsize(3)
-          do j=1,xsize(2)
-             phi(nx,j,k,:)=phi(nx,j,k,:)-cx*(phi(nx,j,k,:)-phi(nx-1,j,k,:))
+       if (.not.scalar_flux_active) then
+          do k=1,xsize(3)
+             do j=1,xsize(2)
+                phi(nx,j,k,:)=phi(nx,j,k,:)-cx*(phi(nx,j,k,:)-phi(nx-1,j,k,:))
+             enddo
           enddo
-       enddo
+       else
+          do is=1,numscalar
+             if (scalar_scheme(is).eq.'div'.or.scalar_scheme(is).eq.'fct') cycle
+             do k=1,xsize(3)
+                do j=1,xsize(2)
+                   phi(nx,j,k,is)=phi(nx,j,k,is)-cx*(phi(nx,j,k,is)-phi(nx-1,j,k,is))
+                enddo
+             enddo
+          enddo
+       endif
     endif
 
     if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &

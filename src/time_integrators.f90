@@ -204,6 +204,8 @@ contains
     use param, only : primary_species, massfrac
     use param, only : scalar_lbound, scalar_ubound
     use param, only : mhd_active
+    use param, only : scalar_flux_active, scalar_scheme
+    use scalar_fct, only : scalar_fct_advance
     use variables, only : numscalar,nu0nu
     use var, only : ta1, tb1
     use mhd,     only : mhd_equation,int_time_magnet
@@ -258,6 +260,7 @@ contains
        ENDIF
 
        DO is = 1, numscalar
+          IF (scalar_scheme(is)=='div'.or.scalar_scheme(is)=='fct') CYCLE
           IF (is.NE.primary_species) THEN
              IF (iimplicit.ge.1) then
                 if (sc_even(is)) then
@@ -280,6 +283,8 @@ contains
              ENDDO
           ENDIF
        ENDDO
+
+       IF (scalar_flux_active) CALL scalar_fct_advance(phi1,dphi1)
 
        IF (primary_species.GE.1) THEN
           phi1(:,:,:,primary_species) = one

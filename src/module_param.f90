@@ -358,6 +358,13 @@ module param
   !! Scalars
   logical, allocatable, dimension(:) :: sc_even, sc_skew
   real(mytype), allocatable, dimension(:) :: scalar_lbound, scalar_ubound
+  ! Opt-in conservative passive-scalar path; independent of legacy clipping.
+  logical :: scalar_flux_active
+  character(len=8), allocatable :: scalar_scheme(:)
+  integer :: scalar_mapping_maxiter
+  real(mytype) :: scalar_fct_lower, scalar_fct_upper
+  real(mytype) :: scalar_mapping_tol, scalar_mapping_flux_tol, scalar_mapping_max_correction
+  real(mytype) :: scalar_mapping_reference_velocity, scalar_mapping_local_velocity_floor, scalar_mapping_near_x
   real(mytype) :: Tref
 
   !! LES modelling flag
