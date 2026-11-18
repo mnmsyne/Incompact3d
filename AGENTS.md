@@ -1,5 +1,13 @@
 # Repository Guidelines
 
+## Branch Scope
+
+On `feat/coaxial-swirl`, add or modify tracked files only under `src/` and `examples/`. Treat `cmake/`, `docs/`, and `tests/` as read-only. Update this root `AGENTS.md` when explicitly asked to maintain the branch guidelines.
+
+Keep local review and testing materials in the ignored `.audit/` directory. Run remote builds and tests in a dedicated working directory on the remote host. Use `.hpc_log/` only on the local machine to archive inputs, logs, and results retrieved from remote work. Exclude these artifacts from commits.
+
+Keep case READMEs focused on input roles, workflows, methods, and diagnostics. Use the corresponding input file as the source of truth for values such as mesh dimensions, domain lengths, time step, run length, decomposition, and output cadence.
+
 ## Project Structure & Module Organization
 
 - `src/` contains the Fortran solver, numerical operators, and `Case-*.f90` modules. Register new sources in `src/CMakeLists.txt` and connect case routines in `src/case.f90`.
@@ -38,7 +46,7 @@ Use free-form Fortran, spaces, and the surrounding indentation style. Keep case 
 
 ## Testing Guidelines
 
-CTest runs MPI cases; TGV compares results against reference data using Python. Add case tests under `tests/<Case>/` with `CMakeLists.txt` and an `input_test.i3d`-style input. No percentage coverage threshold is specified. For numerical changes, report build configuration, process count, stability diagnostics, and relevant reference comparisons. Distinguish syntax checks from compiled, parallel, and physical validation.
+Reuse the existing CTest cases and Python verification tools where applicable. Prepare branch-specific checks in the review and test directories defined above. For numerical changes, report build configuration, process count, stability diagnostics, and relevant reference comparisons. Distinguish syntax checks from compiled, parallel, and physical validation.
 
 ## Commit & Pull Request Guidelines
 
