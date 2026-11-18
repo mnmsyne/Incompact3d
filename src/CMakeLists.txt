@@ -49,6 +49,7 @@ add_executable(xcompact3d
                     poisson.f90
                     probes.f90
                     scalar_flux.f90
+                    scalar_mapping_fourier.f90
                     scalar_flux_mapping.f90
                     scalar_fct.f90
                     schemes.f90
@@ -64,6 +65,13 @@ add_executable(xcompact3d
                     xcompact3d.f90)
 
 target_link_libraries(xcompact3d PRIVATE decomp2d)
+
+# Independent local FFT plans; never reinitialize the pressure FFT singleton.
+# Other compiler/backends retain CG and reject an explicit Fourier request.
+if(TARGET MKL::MKL AND CMAKE_Fortran_COMPILER_ID MATCHES "^Intel")
+  target_link_libraries(xcompact3d PRIVATE MKL::MKL)
+  target_compile_definitions(xcompact3d PRIVATE X3D_SCALAR_MAPPING_MKL)
+endif()
 
 if (MPI_FOUND)
   target_link_libraries(xcompact3d PRIVATE MPI::MPI_Fortran)

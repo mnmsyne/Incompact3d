@@ -361,6 +361,7 @@ module param
   ! Opt-in conservative passive-scalar path; independent of legacy clipping.
   logical :: scalar_flux_active
   character(len=8), allocatable :: scalar_scheme(:)
+  character(len=8) :: scalar_mapping_solver
   integer :: scalar_mapping_maxiter
   real(mytype) :: scalar_fct_lower, scalar_fct_upper
   real(mytype) :: scalar_mapping_tol, scalar_mapping_flux_tol, scalar_mapping_max_correction

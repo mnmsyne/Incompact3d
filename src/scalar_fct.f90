@@ -82,11 +82,27 @@ contains
     real(mytype), intent(out) :: bounds(2)
     real(mytype) :: local(2), both(2)
     integer :: ierr
-    local=[-minval(q(2:nx,:,:)),maxval(q(2:nx,:,:))]
+    local=[-minval(q),maxval(q)]
     call MPI_ALLREDUCE(local,both,2,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     if (ierr/=MPI_SUCCESS) call decomp_2d_abort(1,'Scalar flux extrema reduction failed')
     bounds=[-both(1),both(2)]
   end subroutine global_extrema
+
+  subroutine check_fct_interval(bounds,is,label)
+    real(mytype), intent(in) :: bounds(2)
+    integer, intent(in) :: is
+    character(len=*), intent(in) :: label
+    character(len=256) :: message
+    real(mytype) :: tol
+
+    ! Use the same range for the baseline, the accepted state and its restart.
+    tol=1024._mytype*epsilon(1._mytype)*max(1._mytype,abs(scalar_fct_lower),abs(scalar_fct_upper))
+    if (bounds(1)<scalar_fct_lower-tol.or.bounds(2)>scalar_fct_upper+tol) then
+       write(message,'(a,", species=",i0,", min/max=",2(1x,es24.16e3),", interval=",2(1x,es24.16e3))') &
+            label,is,bounds,scalar_fct_lower,scalar_fct_upper
+       call decomp_2d_abort(1,trim(message))
+    endif
+  end subroutine check_fct_interval
 
   subroutine add_faces(target,source,weight)
     type(scalar_faces), intent(inout) :: target
@@ -105,10 +121,9 @@ contains
     real(mytype), intent(in) :: uz(xsize(1),xsize(2),xsize(3))
     real(mytype), intent(inout) :: dphi(xsize(1),xsize(2),xsize(3),ntime,numscalar)
     integer :: is
-    real(mytype) :: weight,kappa,bounds(2),tol
+    real(mytype) :: weight,kappa,bounds(2)
     call initialize_fct()
     if (itr/=pending_stage+1) call decomp_2d_abort(1,'Invalid conservative scalar RK stage ordering')
-    tol=128._mytype*epsilon(1._mytype)*max(1._mytype,abs(scalar_fct_lower),abs(scalar_fct_upper))
     if (itr==1) then
        old=phi
        call faces_zero(mass_integral)
@@ -116,9 +131,10 @@ contains
           if (.not.new_scalar(is)) cycle
           call check_finite(old(:,:,:,is),'Nonfinite accepted conservative scalar state')
           if (scalar_scheme(is)=='fct') then
-             call global_extrema(old(:,:,:,is),bounds)
-             if (bounds(1)<scalar_fct_lower-tol.or.bounds(2)>scalar_fct_upper+tol) &
-                  call decomp_2d_abort(1,'Accepted scalar is outside the FCT interval')
+             call global_extrema(old(1:1,:,:,is),bounds)
+             call check_fct_interval(bounds,is,'Prescribed inlet scalar is outside the FCT interval')
+             call global_extrema(old(2:nx,:,:,is),bounds)
+             call check_fct_interval(bounds,is,'Accepted scalar is outside the FCT interval')
           endif
           call faces_zero(high_integral(is))
           dphi(:,:,:,2,is)=0._mytype
@@ -155,7 +171,7 @@ contains
     integer, intent(in) :: is
     real(mytype), intent(in) :: kappa
     integer :: i,j,k,jp,jm,kp,km,gi,ierr
-    real(mytype) :: m,delta,bounds(2),cfl,local_cfl,tol
+    real(mytype) :: m,delta,bounds(2),cfl,local_cfl,cfl_tol
     type(scalar_faces) :: f
     call faces_allocate(f)
     f%x=0._mytype; f%y=0._mytype; f%z=0._mytype
@@ -222,13 +238,12 @@ contains
     call scalar_divergence(low_integral(is),div_x)
     low(:,:,:,is)=old(:,:,:,is)-div_x
     call check_finite(low(:,:,:,is),'Nonfinite low-order scalar candidate')
-    call global_extrema(low(:,:,:,is),bounds)
+    call global_extrema(low(2:nx,:,:,is),bounds)
     if (nrank==0) write(*,*) 'SCALAR_BASE step,species,CFL,min,max=',itime,is,cfl,bounds
     if (scalar_scheme(is)=='fct') then
-       tol=256._mytype*epsilon(1._mytype)*max(1._mytype,abs(scalar_fct_lower),abs(scalar_fct_upper))
-       if (cfl>1._mytype+tol) call decomp_2d_abort(1,'Joint scalar advection/diffusion CFL exceeds one')
-       if (bounds(1)<scalar_fct_lower-tol.or.bounds(2)>scalar_fct_upper+tol) &
-            call decomp_2d_abort(1,'Baseline low-order complete scalar step is inadmissible')
+       cfl_tol=256._mytype*epsilon(1._mytype)*max(1._mytype,abs(scalar_fct_lower),abs(scalar_fct_upper))
+       if (cfl>1._mytype+cfl_tol) call decomp_2d_abort(1,'Joint scalar advection/diffusion CFL exceeds one')
+       call check_fct_interval(bounds,is,'Baseline low-order complete scalar step is inadmissible')
     endif
     ! No predictor increment in this first production closure: thetaB=1,
     ! deltaI=0. The baseline itself has already been checked when FCT is used.
@@ -400,7 +415,7 @@ contains
     real(mytype), intent(inout) :: phi(xsize(1),xsize(2),xsize(3),numscalar)
     real(mytype), intent(inout) :: dphi(xsize(1),xsize(2),xsize(3),ntime,numscalar)
     real(mytype) :: bounds(2),identity,global_identity,theta_min,l1,amax
-    real(mytype) :: local_mass(3),global_mass(3),volume,residual,tol
+    real(mytype) :: local_mass(3),global_mass(3),volume,residual
     integer :: is,i,j,k,ierr,nlimited
     if (pending_stage/=itr) call decomp_2d_abort(1,'Missing conservative scalar stage RHS')
     do is=1,numscalar
@@ -412,7 +427,7 @@ contains
        endif
        dphi(:,:,:,2,is)=dphi(:,:,:,1,is)
        call check_finite(phi(:,:,:,is),'Nonfinite high-order scalar RK update')
-       call global_extrema(phi(:,:,:,is),bounds)
+       call global_extrema(phi(2:nx,:,:,is),bounds)
        if (nrank==0) write(*,*) 'SCALAR_STAGE step,stage,species,min,max=',itime,itr,is,bounds
        if (itr/=3) cycle
        call scalar_divergence(high_integral(is),div_x)
@@ -430,11 +445,9 @@ contains
        call scalar_divergence(accepted_integral,div_x)
        phi(2:nx,:,:,is)=old(2:nx,:,:,is)-div_x(2:nx,:,:)
        call check_finite(phi(:,:,:,is),'Nonfinite accepted conservative scalar')
-       call global_extrema(phi(:,:,:,is),bounds)
-       tol=1024._mytype*epsilon(1._mytype)*max(1._mytype,abs(scalar_fct_lower),abs(scalar_fct_upper))
+       call global_extrema(phi(2:nx,:,:,is),bounds)
        if (scalar_scheme(is)=='fct') then
-          if (bounds(1)<scalar_fct_lower-tol.or.bounds(2)>scalar_fct_upper+tol) &
-               call decomp_2d_abort(1,'FCT accepted scalar outside its independent interval')
+          call check_fct_interval(bounds,is,'FCT accepted scalar outside its independent interval')
        endif
        local_mass=0._mytype
        do k=1,xsize(3)

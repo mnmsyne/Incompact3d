@@ -132,11 +132,18 @@ contains
        call factor_line(diffusion(d),lengths(d),alpha(d),d/=1,.true.)
     enddo
 
+    call initialize_pencil_work()
+    initialized = .true.
+  end subroutine initialize_flux
+
+  ! The geometric divergence also serves the auxiliary elliptic operator;
+  ! it needs pencil scratch, not compact derivative coefficients or factors.
+  subroutine initialize_pencil_work()
+    if (allocated(work_y)) return
     allocate(work_y(ysize(1),ysize(2),ysize(3)),velocity_y(ysize(1),ysize(2),ysize(3)))
     allocate(work_z(zsize(1),zsize(2),zsize(3)),velocity_z(zsize(1),zsize(2),zsize(3)))
     allocate(work_x(xsize(1),xsize(2),xsize(3)))
-    initialized = .true.
-  end subroutine initialize_flux
+  end subroutine initialize_pencil_work
 
   subroutine factor_line(f,n,alpha,periodic,is_diffusion)
     type(line_factors), intent(inout) :: f
@@ -371,7 +378,7 @@ contains
     type(scalar_faces), intent(in) :: flow
     real(mytype), intent(out) :: div(xsize(1),xsize(2),xsize(3))
     integer :: i,j,k,jm,km
-    call initialize_flux()
+    call initialize_pencil_work()
     do k=1,ysize(3)
        do j=1,ysize(2)
           jm=wrap(j-1,ny)

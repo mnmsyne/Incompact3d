@@ -65,7 +65,7 @@ subroutine parameter(input_i3d)
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
        scalar_lbound, scalar_ubound, sc_even, sc_skew, &
-       scalar_scheme, scalar_fct_lower, scalar_fct_upper, &
+       scalar_scheme, scalar_fct_lower, scalar_fct_upper, scalar_mapping_solver, &
        scalar_mapping_tol, scalar_mapping_flux_tol, scalar_mapping_maxiter, scalar_mapping_max_correction, &
        scalar_mapping_reference_velocity, scalar_mapping_local_velocity_floor, scalar_mapping_near_x, &
        alpha_sc, beta_sc, g_sc, Tref
@@ -354,6 +354,8 @@ subroutine parameter(input_i3d)
           call scalar_input_abort('Scalar mapping tolerances must be finite')
      if (scalar_mapping_tol.le.zero.or.scalar_mapping_flux_tol.le.zero.or.scalar_mapping_maxiter.lt.1) &
           call scalar_input_abort('Scalar mapping tolerances and iteration limit must be positive')
+     if (scalar_mapping_solver.ne.'cg'.and.scalar_mapping_solver.ne.'fourier') &
+          call scalar_input_abort('scalar_mapping_solver must be cg or fourier')
      if (.not.ieee_is_finite(scalar_mapping_max_correction)) &
           call scalar_input_abort('Set explicit scalar_mapping_max_correction to a finite positive physical budget below huge')
      if (scalar_mapping_max_correction.le.zero.or.scalar_mapping_max_correction.ge.huge(one)) &
@@ -667,6 +669,7 @@ subroutine parameter(input_i3d)
         write(*,"(' scalar FCT interval    : ',2ES17.8)") scalar_fct_lower, scalar_fct_upper
         write(*,"(' scalar mapping tolerances : ',2ES17.8)") scalar_mapping_tol, scalar_mapping_flux_tol
         write(*,"(' scalar mapping maxiter : ',I17)") scalar_mapping_maxiter
+        write(*,"(' scalar mapping solver  : ',A8)") scalar_mapping_solver
         write(*,"(' scalar mapping deltaU budget : ',ES17.8)") scalar_mapping_max_correction
         write(*,"(' scalar mapping reference velocity : ',ES17.8)") scalar_mapping_reference_velocity
         write(*,"(' scalar mapping diagnostic velocity floor : ',ES17.8)") scalar_mapping_local_velocity_floor
@@ -860,6 +863,7 @@ subroutine parameter_defaults()
   scalar_mapping_tol = 1.e-10_mytype
   scalar_mapping_flux_tol = 1.e-10_mytype
   scalar_mapping_maxiter = 500
+  scalar_mapping_solver = 'cg'
   scalar_mapping_max_correction = -one
   scalar_mapping_reference_velocity = -one
   scalar_mapping_local_velocity_floor = -one

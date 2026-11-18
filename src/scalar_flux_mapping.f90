@@ -14,14 +14,16 @@ module scalar_flux_mapping
   use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
   use param, only : dx, dy, dz, itr, itime, scalar_mapping_tol, &
        scalar_mapping_flux_tol, scalar_mapping_maxiter, scalar_mapping_max_correction, &
-       scalar_mapping_reference_velocity, scalar_mapping_local_velocity_floor, scalar_mapping_near_x
+       scalar_mapping_reference_velocity, scalar_mapping_local_velocity_floor, scalar_mapping_near_x, scalar_mapping_solver
   use scalar_flux, only : scalar_faces, faces_allocate, scalar_raw_velocity, &
        scalar_divergence, scalar_cell_volume, scalar_cell_width
+  use scalar_mapping_fourier, only : scalar_fourier_available,scalar_fourier_solve
 
   implicit none
   private
 
   public :: scalar_map_velocity
+  public :: scalar_mapping_apply_operator
   public :: scalar_map_last_iterations, scalar_map_last_max_du
   public :: scalar_map_last_mean_du, scalar_map_last_mean_abs_du
   public :: scalar_map_last_mean_du_xyz
@@ -57,6 +59,8 @@ contains
     real(mytype) :: local_volume, x_diagonal
 
     if (initialized) return
+    if (scalar_mapping_solver=='fourier'.and..not.scalar_fourier_available()) &
+         call mapping_abort('scalar_mapping_solver=fourier requires the MKL mapping backend')
     call faces_allocate(gradient)
     allocate(lambda_x(xsize(1),xsize(2),xsize(3)))
     allocate(residual_x(xsize(1),xsize(2),xsize(3)))
@@ -125,6 +129,45 @@ contains
     enddo
 
   end subroutine face_gradient
+
+  subroutine scalar_mapping_apply_operator(field,image)
+    real(mytype), intent(in) :: field(xsize(1),xsize(2),xsize(3))
+    real(mytype), intent(out) :: image(xsize(1),xsize(2),xsize(3))
+    call mapping_initialize()
+    call face_gradient(field)
+    call scalar_divergence(gradient,image)
+  end subroutine scalar_mapping_apply_operator
+
+  ! Failure-only verification: retain the physical mean divergence. In
+  ! particular, neither the true residual nor mapped divergence is reprojected.
+  ! The raw faces are still untouched here. Reuse CG scratch after its failure.
+  subroutine mapping_failure_residuals(raw,iteration,recursive_norm)
+    type(scalar_faces), intent(in) :: raw
+    integer, intent(in) :: iteration
+    real(mytype), intent(in) :: recursive_norm
+    real(mytype) :: true_norm,mapped_norm,gap_norm,raw_mean,mapped_mean
+
+    call scalar_mapping_apply_operator(lambda_x,image_x)
+    call scalar_divergence(raw,preconditioned_x)
+    raw_mean=weighted_mean(preconditioned_x)
+    image_x=preconditioned_x-image_x
+    mapped_norm=global_max_abs(image_x)
+    mapped_mean=weighted_mean(image_x)
+    preconditioned_x=image_x-scalar_map_last_compatibility
+    preconditioned_x(1,:,:)=0._mytype
+    true_norm=global_max_abs(preconditioned_x)
+    preconditioned_x=preconditioned_x-residual_x
+    gap_norm=global_max_abs(preconditioned_x)
+    if (nrank==0) then
+       write(*,*) 'SCALAR_MAP_FAILURE step,stage,iterations=',itime,itr,iteration
+       write(*,*) 'SCALAR_MAP_FAILURE recursive,true,mapped,gap_inf=', &
+            recursive_norm,true_norm,mapped_norm,gap_norm
+       write(*,*) 'SCALAR_MAP_FAILURE original_mean,recomputed_mean,mapped_mean=', &
+            scalar_map_last_compatibility,raw_mean,mapped_mean
+       write(*,*) 'SCALAR_MAP_FAILURE correction_budget_not_evaluated'
+    endif
+    flush(output_unit)
+  end subroutine mapping_failure_residuals
 
   function weighted_dot(a,b) result(value)
 
@@ -404,7 +447,7 @@ contains
     real(mytype), intent(in) :: uy(xsize(1),xsize(2),xsize(3))
     real(mytype), intent(in) :: uz(xsize(1),xsize(2),xsize(3))
     type(scalar_faces), intent(inout) :: mapped
-    real(mytype) :: rz, rz_new, denominator, alpha, residual_norm
+    real(mytype) :: rz, rz_new, denominator, alpha, residual_norm,true_norm
     real(mytype) :: local_boundary_min, boundary_min, start_time, elapsed
     integer :: iteration, invalid, global_invalid, ierr
 
@@ -454,35 +497,55 @@ contains
     endif
     lambda_x = 0._mytype
     call zero_mean(residual_x)
-    call precondition()
-    direction_x = preconditioned_x
-    rz = weighted_dot(residual_x,preconditioned_x)
-    residual_norm = global_max_abs(residual_x)
-    iteration = 0
-    do while (residual_norm > 0.5_mytype*scalar_mapping_tol)
-       if (iteration >= scalar_mapping_maxiter) then
-          if (nrank == 0) write(*,*) 'SCALAR_MAP CG iterations/residual=',iteration,residual_norm
-          call mapping_abort('Scalar auxiliary mapping did not converge')
+    iteration=0
+    if (scalar_mapping_solver=='fourier') then
+       call scalar_fourier_solve(residual_x,lambda_x)
+       call zero_mean(lambda_x)
+       call scalar_mapping_apply_operator(lambda_x,image_x)
+       preconditioned_x=residual_x-image_x
+       true_norm=global_max_abs(preconditioned_x)
+       if (.not.ieee_is_finite(true_norm).or.true_norm>0.5_mytype*scalar_mapping_tol) then
+          if (nrank==0) write(*,*) 'SCALAR_MAP Fourier true_residual,target=', &
+               true_norm,0.5_mytype*scalar_mapping_tol
+          flush(output_unit)
+          call MPI_BARRIER(MPI_COMM_WORLD,ierr)
+          call check_mpi(ierr)
+          call mapping_abort('Scalar Fourier mapping failed original-operator residual verification')
        endif
-       call face_gradient(direction_x)
-       call scalar_divergence(gradient,image_x)
-       denominator = weighted_dot(direction_x,image_x)
-       if (.not.ieee_is_finite(denominator) .or. denominator <= tiny(denominator) .or. &
-            .not.ieee_is_finite(rz) .or. rz <= 0._mytype) then
-          call mapping_abort('Scalar auxiliary mapping CG lost positive definiteness')
-       endif
-       alpha = rz/denominator
-       lambda_x = lambda_x + alpha*direction_x
-       residual_x = residual_x - alpha*image_x
-       call zero_mean(residual_x)
-       iteration = iteration+1
-       residual_norm = global_max_abs(residual_x)
-       if (residual_norm <= 0.5_mytype*scalar_mapping_tol) exit
+    else
        call precondition()
-       rz_new = weighted_dot(residual_x,preconditioned_x)
-       direction_x = preconditioned_x + (rz_new/rz)*direction_x
-       rz = rz_new
-    enddo
+       direction_x = preconditioned_x
+       rz = weighted_dot(residual_x,preconditioned_x)
+       residual_norm = global_max_abs(residual_x)
+       iteration = 0
+       do while (residual_norm > 0.5_mytype*scalar_mapping_tol)
+          if (iteration >= scalar_mapping_maxiter) then
+             if (nrank == 0) write(*,*) 'SCALAR_MAP CG iterations/residual=',iteration,residual_norm
+             call mapping_failure_residuals(mapped,iteration,residual_norm)
+             call MPI_BARRIER(MPI_COMM_WORLD,ierr)
+             call check_mpi(ierr)
+             call mapping_abort('Scalar auxiliary mapping did not converge')
+          endif
+          call face_gradient(direction_x)
+          call scalar_divergence(gradient,image_x)
+          denominator = weighted_dot(direction_x,image_x)
+          if (.not.ieee_is_finite(denominator) .or. denominator <= tiny(denominator) .or. &
+               .not.ieee_is_finite(rz) .or. rz <= 0._mytype) then
+             call mapping_abort('Scalar auxiliary mapping CG lost positive definiteness')
+          endif
+          alpha = rz/denominator
+          lambda_x = lambda_x + alpha*direction_x
+          residual_x = residual_x - alpha*image_x
+          call zero_mean(residual_x)
+          iteration = iteration+1
+          residual_norm = global_max_abs(residual_x)
+          if (residual_norm <= 0.5_mytype*scalar_mapping_tol) exit
+          call precondition()
+          rz_new = weighted_dot(residual_x,preconditioned_x)
+          direction_x = preconditioned_x + (rz_new/rz)*direction_x
+          rz = rz_new
+       enddo
+    endif
     scalar_map_last_iterations = iteration
     call face_gradient(lambda_x)
     call correction_diagnostics(ux,uy,uz,mapped)
